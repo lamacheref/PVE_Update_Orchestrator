@@ -28,7 +28,7 @@
 - [x] `update` node + guest (topgrade, autoremove, kernel, kernel-clean natif, backup PBS fail-closed)
 - [x] `discord` (start + embed/cible + synthèse, retry, idempotent)
 - [x] `serve` lecture seule + dashboard (runs, détail, polling 5s)
-- [ ] Run dry-run complet 7 nodes (lecture seule) 🔍
+- [x] Run dry-run complet 7 nodes : 29 OK / 1 FAIL (HOLD Janus connu) / 3 HOLD-skipped — 33 cibles, agents QEMU OK 🔍
 - [ ] Canary Janus + 1 guest `--apply --yes` puis réel 🐤
 - [ ] Webhook Discord dans `/etc/pve-orchestrator/.env` + premier run notifié 🔔
 
