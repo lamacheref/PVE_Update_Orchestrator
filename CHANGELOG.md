@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.5.1] - 2026-09-21
+
+- merge: bump CI (d00e0b4)
+- fix: plafond timeout pool respecte ctx + --skip-backup (3a114d9)
+
 ## [0.5.0] - 2026-09-21
 
 - merge: bump CI (f255a50)
