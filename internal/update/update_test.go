@@ -70,6 +70,15 @@ func TestNewestBootImage(t *testing.T) {
 	}
 }
 
+func TestTopgradeBase(t *testing.T) {
+	if s := topgradeBase(nil); !strings.Contains(s, "--allow-root") {
+		t.Errorf("moderne attendu : %q", s)
+	}
+	if s := topgradeBase(errors.New("vieux")); strings.Contains(s, "--allow-root") {
+		t.Errorf("ancien attendu sans flag : %q", s)
+	}
+}
+
 func TestBackupGuestVerify(t *testing.T) {
 	okOut := "INFO: Starting Backup\nINFO: Backup Volume: local:backup/vzdump-lxc-100-xyz.zst\nINFO: Finished Backup\n"
 	run := func(_ context.Context, host, cmd string) (string, error) {

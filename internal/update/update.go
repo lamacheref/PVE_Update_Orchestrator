@@ -184,6 +184,16 @@ func newestBootImage(ctx context.Context, exec Runner, host string) string {
 	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "vmlinuz-"))
 }
 
+// topgradeBase rend la commande avec --allow-root si supporté (vieux
+// topgrade comme la 9.x rejettent le flag inconnu → on sonde d'abord).
+func topgradeBase(probeErr error) string {
+	base := "DEBIAN_FRONTEND=noninteractive topgrade -y --only system"
+	if probeErr == nil {
+		return "DEBIAN_FRONTEND=noninteractive topgrade -y --allow-root --only system"
+	}
+	return base
+}
+
 // waitSSHUp attend le retour SSH après reboot (progression chaque minute).
 func waitSSHUp(ctx context.Context, run Runner, host, target string, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
@@ -230,7 +240,8 @@ func UpdateNode(ctx context.Context, run Runner, host, name string, o Options) R
 
 	progress(r.Target, "topgrade --only system (long, jusqu'à 45 min)")
 	tctx, cancel := step(ctx, 45*time.Minute)
-	_, err = exec(tctx, host, "DEBIAN_FRONTEND=noninteractive topgrade -y --only system")
+	_, probeErr := exec(tctx, host, "topgrade --allow-root --version >/dev/null 2>&1")
+	_, err = exec(tctx, host, topgradeBase(probeErr))
 	cancel()
 	if err != nil {
 		r.fail("topgrade : %v", err)
@@ -474,10 +485,23 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 	}
 	r.note("avant : kernel=%s upgradable=%d", r.KernelBefore, r.PkgsBefore)
 
-	updateCmd := "DEBIAN_FRONTEND=noninteractive topgrade -y --only system && DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && apt-get clean"
+	updateCmd := "DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && apt-get clean"
 	progress(r.Target, "topgrade + autoremove guest (long)")
 	uctx, ucancel := step(ctx, 45*time.Minute)
 	defer ucancel()
+	probeTopgrade := func() error {
+		if o.DryRun {
+			return nil // dry-run : aucun exec réel, on affiche la forme moderne
+		}
+		if g.Kind == "lxc" {
+			_, err := exec(uctx, nodeIP, guestShell(g, "topgrade --allow-root --version >/dev/null 2>&1"))
+			return err
+		}
+		_, err := qemuRun(uctx, run, nodeIP, g.VMID, "topgrade --allow-root --version")
+		return err
+	}
+	topCmd := topgradeBase(probeTopgrade())
+	updateCmd = topCmd + " && " + updateCmd
 	if g.Kind == "lxc" {
 		if _, err := exec(uctx, nodeIP, guestShell(g, updateCmd)); err != nil {
 			r.fail("update : %v", err)
