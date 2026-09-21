@@ -4,6 +4,10 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.2.5] - 2026-09-21
+
+- fix: CI chaque plateforme publie chez elle (URL generee, plus de cross-push) (a34a795)
+
 ## [0.2.4] - 2026-09-21
 
 - merge: bump CI (bb0c55b)
