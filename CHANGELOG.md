@@ -4,6 +4,10 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.2.2] - 2026-09-21
+
+- fix: CI sans artifact actions (GHES) : build+publish dans un seul job (28d8bc2)
+
 ## [0.2.1] - 2026-09-21
 
 - fix: CI gitea via REGISTRY_USER/TOKEN + URL derivee + SSH-only acte (1006840)
