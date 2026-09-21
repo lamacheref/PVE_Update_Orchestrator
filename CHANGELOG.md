@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.6.0] - 2026-09-21
+
+- merge: bump CI (274a64d)
+- feat: preambule reparation dpkg avant topgrade (84a20b9)
+
 ## [0.5.2] - 2026-09-21
 
 - merge: bump CI (6229704)
