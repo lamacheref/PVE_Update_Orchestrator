@@ -39,6 +39,7 @@ type Options struct {
 	PBSStorage    string
 	KeepKernels   int
 	PruneAll      bool
+	UpdateTimeout time.Duration // topgrade (défaut 60m, 0 = 60m)
 	BackupTimeout time.Duration // 0 = suivi quasi-illimité (24h plafond)
 	BackupWait    time.Duration // attente max backup tiers (<=0 = report immédiat)
 	SkipBackup    bool          // MAJ sans snapshot (assumé)
@@ -165,6 +166,7 @@ func Run(ctx context.Context, run Runner, nodes []config.Node, o Options) (*RunS
 	nodes = orderNodes(nodes, o.CanaryFirst)
 	uo := update.Options{DryRun: o.DryRun, AutoReboot: o.AutoReboot, KeepKernels: o.KeepKernels,
 		PBSStorage: o.PBSStorage, PruneAll: o.PruneAll, SkipBackup: o.SkipBackup,
+		UpdateTimeout: o.UpdateTimeout,
 		BackupTimeout: o.BackupTimeout, BackupWait: o.BackupWait}
 
 	// Inventaire guests (lecture seule, même en dry-run).

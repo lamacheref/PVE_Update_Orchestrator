@@ -21,6 +21,11 @@ func TestParseBeforeAfter(t *testing.T) {
 	if k != "6.8.12-4-pve" || n != 12 {
 		t.Errorf("got %q %d", k, n)
 	}
+	// Shell pollué (starship sur stderr fusionnée) : motif version quand même trouvé.
+	k, _ = parseBeforeAfter("/root/.bashrc: line 19: starship: command not found\n6.8.12-4-pve\n---APT---\n84\n")
+	if k != "6.8.12-4-pve" {
+		t.Errorf("got %q", k)
+	}
 }
 
 func TestSelectKernelsToPurge(t *testing.T) {

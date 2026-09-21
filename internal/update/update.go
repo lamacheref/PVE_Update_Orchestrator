@@ -31,6 +31,7 @@ type Options struct {
 	PBSStorage    string
 	PruneAll      bool // docker image prune -a (défaut : system prune seul)
 	RebootWait    time.Duration
+	UpdateTimeout time.Duration // topgrade (défaut 60m, 0 = 60m)
 	BackupTimeout time.Duration // 0 = suivi quasi-illimité (24h plafond)
 	BackupWait    time.Duration // attente max d'un backup tiers (<=0 = report immédiat)
 	SkipBackup    bool          // --skip-backup : MAJ SANS snapshot (assumé, tracé)
@@ -70,6 +71,14 @@ func progress(target, step string) {
 	fmt.Fprintf(os.Stderr, "⏳ [%s] %s…\n", target, step)
 }
 
+// updateTimeout borne topgrade (défaut 60 min pour les gros hôtes docker).
+func updateTimeout(o Options) time.Duration {
+	if o.UpdateTimeout > 0 {
+		return o.UpdateTimeout
+	}
+	return 60 * time.Minute
+}
+
 // step borne une étape longue par son propre timeout.
 func step(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, d)
@@ -101,15 +110,24 @@ const (
 	aptAfter  = aptBefore
 )
 
-// parseBeforeAfter lit "kernel\n---APT---\nN".
+// parseBeforeAfter lit kernel + compte depuis "…\n---APT---\nN".
+// Robuste aux shells pollués (.bashrc/starship sur stderr fusionnée) :
+// le kernel est cherché par motif version, pas par position.
 func parseBeforeAfter(out string) (kernel string, pkgs int) {
 	parts := strings.SplitN(out, "---APT---", 2)
-	kernel = strings.TrimSpace(strings.Split(parts[0], "\n")[0])
+	head := parts[0]
+	if m := reKernelLine.FindString(head); m != "" {
+		kernel = m
+	} else {
+		kernel = strings.TrimSpace(strings.Split(head, "\n")[0])
+	}
 	if len(parts) == 2 {
 		pkgs, _ = strconv.Atoi(strings.TrimSpace(parts[1]))
 	}
 	return kernel, pkgs
 }
+
+var reKernelLine = regexp.MustCompile(`\d+\.\d+\.\d+-\d+\S*`)
 
 var reKernelPkg = regexp.MustCompile(`^ii\s+((?:pve-kernel|proxmox-kernel)-\S+)\s`)
 var reKernelVer = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)-(\d+)`)
@@ -243,8 +261,8 @@ func UpdateNode(ctx context.Context, run Runner, host, name string, o Options) R
 	}
 	r.note("avant : kernel=%s upgradable=%d", r.KernelBefore, r.PkgsBefore)
 
-	progress(r.Target, "topgrade --only system (long, jusqu'à 45 min)")
-	tctx, cancel := step(ctx, 45*time.Minute)
+	progress(r.Target, "topgrade --only system (long)")
+	tctx, cancel := step(ctx, updateTimeout(o))
 	_, probeErr := exec(tctx, host, "topgrade --allow-root --version >/dev/null 2>&1")
 	_, err = exec(tctx, host, topgradeBase(probeErr))
 	cancel()
@@ -492,7 +510,7 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 
 	updateCmd := "DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && apt-get clean"
 	progress(r.Target, "topgrade + autoremove guest (long)")
-	uctx, ucancel := step(ctx, 45*time.Minute)
+	uctx, ucancel := step(ctx, updateTimeout(o))
 	defer ucancel()
 	probeTopgrade := func() error {
 		if o.DryRun {

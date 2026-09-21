@@ -572,6 +572,7 @@ func cmdRun(ctx context.Context, args []string) error {
 	backupTimeout := fs.Duration("backup-timeout", 0, "timeout backup PBS, 0 = quasi-illimité")
 	backupWait := fs.Duration("backup-wait", 30*time.Minute, "attente max backup tiers, 0 = report immédiat")
 	skipBackup := fs.Bool("skip-backup", false, "MAJ SANS snapshot PBS (assumé, tracé dans le rapport)")
+	updateTimeout := fs.Duration("update-timeout", 60*time.Minute, "timeout topgrade par cible")
 	pruneAll := fs.Bool("prune-all", false, "docker image prune -a")
 	stateDir := fs.String("state-dir", "state", "état runs + dashboard")
 	resume := fs.String("resume", "", "run-id à reprendre")
@@ -638,7 +639,8 @@ func cmdRun(ctx context.Context, args []string) error {
 		AutoReboot: *autoReboot && !*noReboot, CanaryFirst: *canaryFirst,
 		Workers: *workers, PBSStorage: pbsStorage, KeepKernels: keepKernels,
 		BackupTimeout: *backupTimeout, BackupWait: *backupWait, SkipBackup: *skipBackup,
-		PruneAll: *pruneAll, StateDir: *stateDir, Resume: *resume, WebhookURL: webhook,
+		UpdateTimeout: *updateTimeout,
+		PruneAll:      *pruneAll, StateDir: *stateDir, Resume: *resume, WebhookURL: webhook,
 	}
 	st, err := runner.Run(ctx, pool.Run, nodes, o)
 	if err != nil {
