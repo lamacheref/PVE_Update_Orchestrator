@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.4.1] - 2026-09-21
+
+- merge: bump CI (915af12)
+- docs: dry-run 7 nodes 29 OK valide (61b2073)
+
 ## [0.4.0] - 2026-09-21
 
 - merge: bump CI (2fa5c03)
