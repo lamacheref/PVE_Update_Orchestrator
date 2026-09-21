@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.2.7] - 2026-09-21
+
+- merge: bump CI (627e673)
+- docs: run reel Janus OK + webhook rotation refusee (risque assume) (f9de5d0)
+
 ## [0.2.6] - 2026-09-21
 
 - docs: releases verifiees github+gitea (8e3222b)
