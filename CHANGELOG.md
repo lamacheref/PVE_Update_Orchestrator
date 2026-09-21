@@ -4,6 +4,10 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.2.3] - 2026-09-21
+
+- fix: CI echec explicite si secrets vides + diag reponse Gitea (8b7fe6b)
+
 ## [0.2.2] - 2026-09-21
 
 - fix: CI sans artifact actions (GHES) : build+publish dans un seul job (28d8bc2)
