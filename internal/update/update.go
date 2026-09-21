@@ -174,6 +174,15 @@ func SelectKernelsToPurge(installed []string, running string, keep int) []string
 	return purge
 }
 
+// newestBootImage rend la version du vmlinuz le plus récent ("" si illisible).
+func newestBootImage(ctx context.Context, exec Runner, host string) string {
+	out, err := exec(ctx, host, "ls -t /boot/vmlinuz-* 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null || true")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "vmlinuz-"))
+}
+
 // waitSSHUp attend le retour SSH après reboot (progression chaque minute).
 func waitSSHUp(ctx context.Context, run Runner, host, target string, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
@@ -247,8 +256,18 @@ func UpdateNode(ctx context.Context, run Runner, host, name string, o Options) R
 	}
 	r.note("après : kernel=%s upgradable=%d", r.KernelAfter, r.PkgsAfter)
 
+	// Un kernel installé (même par un run précédent interrompu) mais non booté
+	// impose un reboot : on compare aussi au vmlinuz le plus récent.
+	installed := ""
+	if !o.DryRun {
+		installed = newestBootImage(ctx, exec, host)
+	}
 	changed := r.KernelBefore != r.KernelAfter
-	if changed && !o.DryRun && o.AutoReboot {
+	pending := installed != "" && installed != r.KernelAfter
+	if pending {
+		r.note("kernel installé (%s) ≠ booté (%s) → reboot requis", installed, r.KernelAfter)
+	}
+	if (changed || pending) && !o.DryRun && o.AutoReboot {
 		r.note("nouveau kernel → reboot")
 		if _, err := run(ctx, host, "reboot"); err != nil {
 			r.note("reboot émis (erreur attendue, connexion coupée) : %v", err)
@@ -271,7 +290,11 @@ func UpdateNode(ctx context.Context, run Runner, host, name string, o Options) R
 		}
 		r.Rebooted = true
 		r.note("reboot OK en %s", time.Since(t1).Round(time.Second))
-	} else if changed {
+		if out, err := run(ctx, host, "uname -r"); err == nil {
+			r.KernelAfter = strings.TrimSpace(out)
+			r.note("booté sur : %s", r.KernelAfter)
+		}
+	} else if changed || pending {
 		r.note("nouveau kernel, reboot skippé (dry-run ou auto-reboot off)")
 	}
 
@@ -482,10 +505,20 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 	r.note("après : kernel=%s upgradable=%d", r.KernelAfter, r.PkgsAfter)
 
 	changed := r.KernelBefore != r.KernelAfter
+	pending := false
+	if g.Kind == "qemu" && !o.DryRun {
+		out, err := qemuRun(ctx, run, nodeIP, g.VMID, "ls -t /boot/vmlinuz-* 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null || true")
+		if err == nil {
+			if img := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "vmlinuz-")); img != "" && img != r.KernelAfter {
+				pending = true
+				r.note("kernel VM installé (%s) ≠ booté (%s) → reboot requis", img, r.KernelAfter)
+			}
+		}
+	}
 	switch {
 	case g.Kind == "lxc":
 		r.note("LXC : kernel partagé avec l'hôte, pas de reboot guest")
-	case changed && !o.DryRun && o.AutoReboot:
+	case (changed || pending) && !o.DryRun && o.AutoReboot:
 		r.note("nouveau kernel VM → reboot")
 		if _, err := run(ctx, nodeIP, fmt.Sprintf("qm reboot %d", g.VMID)); err != nil {
 			r.fail("reboot VM : %v", err)
@@ -496,7 +529,7 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 			return r
 		}
 		r.Rebooted = true
-	case changed:
+	case changed || pending:
 		r.note("nouveau kernel, reboot skippé (dry-run ou auto-reboot off)")
 	}
 	r.Duration = time.Since(t0).Round(time.Second).String()

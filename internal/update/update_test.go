@@ -55,6 +55,15 @@ func TestKernelPackages(t *testing.T) {
 	}
 }
 
+func TestNewestBootImage(t *testing.T) {
+	run := func(_ context.Context, host, cmd string) (string, error) {
+		return "vmlinuz-7.0.14-19-pve\n", nil
+	}
+	if got := newestBootImage(context.Background(), run, "h"); got != "7.0.14-19-pve" {
+		t.Errorf("got %q", got)
+	}
+}
+
 func TestBackupGuestVerify(t *testing.T) {
 	okOut := "INFO: Starting Backup\nINFO: Backup Volume: local:backup/vzdump-lxc-100-xyz.zst\nINFO: Finished Backup\n"
 	run := func(_ context.Context, host, cmd string) (string, error) {
