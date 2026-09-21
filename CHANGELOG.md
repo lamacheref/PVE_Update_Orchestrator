@@ -4,6 +4,10 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.2.6] - 2026-09-21
+
+- docs: releases verifiees github+gitea (8e3222b)
+
 ## [0.2.5] - 2026-09-21
 
 - fix: CI chaque plateforme publie chez elle (URL generee, plus de cross-push) (a34a795)
