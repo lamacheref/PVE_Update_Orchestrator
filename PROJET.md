@@ -249,7 +249,7 @@ pve-orchestrator serve --listen :8080
 
 | ✅ Règle | 📝 Détail |
 |---|---|
-| 📸 Snapshot | **Toujours**, jamais stop : `vzdump --mode snapshot --storage pbs-pre-update --compress zstd` |
+| 📸 Snapshot | **Toujours**, jamais stop : `vzdump --mode snapshot --storage pbs --compress zstd` (défaut = stockage réel `pbs`, configurable ; datastore dédié recommandé à terme) |
 | 🔍 Vérification | Snapshot listé + taille > 0 + log OK, enregistré en base `{run_id, vmid, node, snapshot, size}` |
 | 🧹 Rétention | Prune auto post-run OK (`--daily 7 --weekly 4`) |
 | ↩️ Rollback guest | `stop + pct restore / qmrestore + start + post-check + embed` 🔔 |

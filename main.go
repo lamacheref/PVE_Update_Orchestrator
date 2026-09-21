@@ -567,7 +567,7 @@ func cmdRun(ctx context.Context, args []string) error {
 	noReboot := fs.Bool("no-reboot", false, "désactive les reboots")
 	canaryFirst := fs.Bool("canary-first", true, "canary d'abord")
 	workers := fs.Int("workers", 4, "parallélisme guests")
-	pbs := fs.String("pbs-storage", "pbs-pre-update", "datastore PBS (sans --config)")
+	pbs := fs.String("pbs-storage", "pbs", "datastore PBS (sans --config)")
 	keep := fs.Int("keep-kernels", 2, "kernels conservés (sans --config)")
 	pruneAll := fs.Bool("prune-all", false, "docker image prune -a")
 	stateDir := fs.String("state-dir", "state", "état runs + dashboard")

@@ -11,7 +11,7 @@ ssh:
 concurrency:
   guest_workers: 4
 pbs:
-  storage: pbs-pre-update
+  storage: pbs
   mode: snapshot
 discord:
   webhook_env: DISCORD_WEBHOOK_UPDATEUR

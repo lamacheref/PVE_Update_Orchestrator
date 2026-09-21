@@ -91,7 +91,8 @@ func UpgradableCount(out string) int {
 }
 
 const (
-	aptBefore = `uname -r; echo ---APT---; apt list --upgradable 2>/dev/null | grep -v -c '^Listing'`
+	// NOTE: `|| true` car `grep -c` sort en status 1 quand le compte est 0.
+	aptBefore = `uname -r; echo ---APT---; apt list --upgradable 2>/dev/null | grep -v -c '^Listing' || true`
 	aptAfter  = aptBefore
 )
 
