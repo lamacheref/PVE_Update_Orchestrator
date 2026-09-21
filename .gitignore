@@ -1,0 +1,9 @@
+.env
+/etc/
+*.pem
+*.key
+*pve-orchestrator_ed25519*
+*.sqlite*
+*.db
+/bin/
+/dist/
