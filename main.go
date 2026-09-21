@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/lamacheref/pve-update-orchestrator/internal/bootstrap"
+	"github.com/lamacheref/pve-update-orchestrator/internal/cluster"
 	"github.com/lamacheref/pve-update-orchestrator/internal/config"
 	"github.com/lamacheref/pve-update-orchestrator/internal/inventory"
 	"github.com/lamacheref/pve-update-orchestrator/internal/sshpool"
+	"gopkg.in/yaml.v3"
 )
 
 // version est surchargée à la compilation :
@@ -38,6 +40,8 @@ func main() {
 		err = cmdInventory(ctx, os.Args[2:])
 	case "bootstrap-ssh":
 		err = cmdBootstrap(ctx, os.Args[2:])
+	case "cluster":
+		err = cmdCluster(ctx, os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "commande inconnue : %s\n", os.Args[1])
 		usage()
@@ -54,7 +58,11 @@ func usage() {
 Usage:
   pve-orchestrator --version
   pve-orchestrator inventory sync [--nodes-file F] [--config F] [--nodes A,B] [--workers N] [--out F]
-  pve-orchestrator bootstrap-ssh --seed-key F [--nodes-file F] [--nodes A,B] [--key F] [--generate-only] [--yes]`)
+  pve-orchestrator cluster discover --seed H [--nodes-file F] [--key F | --seed-key F] [--sync] [--out F]
+  pve-orchestrator bootstrap-ssh --seed-key F [--nodes-file F] [--nodes A,B] [--key F] [--yes]
+  pve-orchestrator bootstrap-ssh --reconcile [--seed H] [--seed-key F] [--yes]
+  pve-orchestrator bootstrap-ssh --rotate --seed-key F [--yes]
+  pve-orchestrator bootstrap-ssh --revoke [--seed-key F] [--yes]`)
 }
 
 func csvSet(s string) map[string]bool {
@@ -161,9 +169,29 @@ func cmdBootstrap(ctx context.Context, args []string) error {
 	newKey := fs.String("key", "~/.ssh/pve-orchestrator_ed25519", "clé dédiée à déployer")
 	knownHosts := fs.String("known-hosts", "~/.ssh/known_hosts", "known_hosts")
 	genOnly := fs.Bool("generate-only", false, "génère la clé sans rien déployer")
-	yes := fs.Bool("yes", false, "confirme le déploiement (modifie les nodes !)")
+	rotate := fs.Bool("rotate", false, "nouvelle clé : déploie puis révoque l'ancienne")
+	revoke := fs.Bool("revoke", false, "purge la clé dédiée des authorized_keys")
+	reconcile := fs.Bool("reconcile", false, "découvre le cluster et converge la clé partout")
+	seed := fs.String("seed", "", "hôte seed pour la découverte (défaut : 1er node)")
+	yes := fs.Bool("yes", false, "confirme les modifications (modifie les nodes !)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	modes := 0
+	for _, m := range []bool{*rotate, *revoke, *reconcile} {
+		if m {
+			modes++
+		}
+	}
+	if modes > 1 {
+		return fmt.Errorf("--rotate, --revoke et --reconcile sont exclusifs")
+	}
+
+	pools := func(keyFile string, acceptNew bool) (*sshpool.Pool, error) {
+		return sshpool.New(sshpool.Options{
+			User: "root", KeyFile: keyFile, KnownHostsFile: *knownHosts, AcceptNewKeys: acceptNew,
+		})
 	}
 
 	pub, created, err := bootstrap.GenerateKey(*newKey)
@@ -176,6 +204,48 @@ func cmdBootstrap(ctx context.Context, args []string) error {
 	} else {
 		fmt.Printf("🔑 clé existante : %s (%s)\n", *newKey, fp)
 	}
+
+	switch {
+	case *revoke:
+		if !*yes {
+			return fmt.Errorf("refusé sans --yes : purge /root/.authorized_keys des nodes")
+		}
+		nodes, err := config.LoadNodes(*nodesFile)
+		if err != nil {
+			return err
+		}
+		nodes = config.FilterNodes(nodes, csvSet(*only))
+		keyFile := *newKey
+		if *seedKey != "" {
+			keyFile = *seedKey // la dédiée est peut-être déjà cassée : passe par la seed
+		}
+		pool, err := pools(keyFile, true)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		return runRevoke(ctx, pool.Run, nodes, pub)
+	case *rotate:
+		if *seedKey == "" || !*yes {
+			return fmt.Errorf("--rotate exige --seed-key et --yes")
+		}
+		seedPool, err := pools(*seedKey, true)
+		if err != nil {
+			return fmt.Errorf("pool seed : %w", err)
+		}
+		defer seedPool.Close()
+		nodes, err := config.LoadNodes(*nodesFile)
+		if err != nil {
+			return err
+		}
+		return runRotate(ctx, seedPool, *newKey, *knownHosts, config.FilterNodes(nodes, csvSet(*only)))
+	case *reconcile:
+		if !*yes {
+			return fmt.Errorf("refusé sans --yes : déploie la clé sur le cluster découvert")
+		}
+		return runReconcile(ctx, *nodesFile, csvSet(*only), *newKey, *seedKey, *knownHosts, *seed, pub)
+	}
+
 	if *genOnly {
 		return nil
 	}
@@ -232,5 +302,309 @@ func cmdBootstrap(ctx context.Context, args []string) error {
 		return fmt.Errorf("%d node(s) en échec (seed révoquée ? réseau ?)", fail)
 	}
 	fmt.Println("💡 la seed ne sert plus : révoquez-la / archivez-la hors ligne.")
+	return nil
+}
+
+// runRevoke purge la clé dédiée des authorized_keys (lignes du projet).
+func runRevoke(ctx context.Context, run bootstrap.Runner, nodes []config.Node, pub string) error {
+	if len(nodes) == 0 {
+		return fmt.Errorf("aucun node après filtre")
+	}
+	fail := 0
+	for _, n := range nodes {
+		fmt.Printf("→ %s (%s)… ", n.Name, n.IP)
+		nb, err := bootstrap.RevokeAuthorizedKey(ctx, run, n.IP, pub)
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			fail++
+			continue
+		}
+		fmt.Printf("✅ %d ligne(s) purgée(s)\n", nb)
+	}
+	fmt.Printf("— %d OK / %d en erreur\n", len(nodes)-fail, fail)
+	if fail > 0 {
+		return fmt.Errorf("%d node(s) en échec", fail)
+	}
+	return nil
+}
+
+// runRotate génère une clé fraîche, la déploie, la vérifie, puis révoque
+// l'ancienne partout. En cas d'échec, l'ancienne reste en place.
+func runRotate(ctx context.Context, seedPool *sshpool.Pool, keyPath, knownHosts string, nodes []config.Node) error {
+	if len(nodes) == 0 {
+		return fmt.Errorf("aucun node après filtre")
+	}
+	newPub, prevPub, cleanup, err := bootstrap.RotateKeyFiles(keyPath)
+	if err != nil {
+		return err
+	}
+	newFP, _ := bootstrap.Fingerprint(newPub)
+	fmt.Printf("🔑 nouvelle clé : %s (%s)\n", keyPath, newFP)
+	if prevPub == "" {
+		fmt.Println("💡 première génération : rien à révoquer.")
+		return nil
+	}
+	prevFP, _ := bootstrap.Fingerprint(prevPub)
+	fmt.Printf("🗝️ ancienne clé à révoquer : %s\n", prevFP)
+
+	newPool, err := sshpool.New(sshpool.Options{User: "root", KeyFile: keyPath, KnownHostsFile: knownHosts})
+	if err != nil {
+		return err
+	}
+	defer newPool.Close()
+
+	fail := 0
+	for _, n := range nodes {
+		fmt.Printf("→ %s (%s)… ", n.Name, n.IP)
+		if err := bootstrap.EnsureAuthorizedKey(ctx, seedPool.Run, n.IP, newPub); err != nil {
+			fmt.Printf("❌ déploiement : %v\n", err)
+			fail++
+			continue
+		}
+		if _, err := newPool.Run(ctx, n.IP, "hostname"); err != nil {
+			fmt.Printf("❌ vérif nouvelle clé : %v\n", err)
+			fail++
+			continue
+		}
+		nb, err := bootstrap.RevokeAuthorizedKey(ctx, seedPool.Run, n.IP, prevPub)
+		if err != nil {
+			fmt.Printf("❌ révocation ancienne : %v\n", err)
+			fail++
+			continue
+		}
+		fmt.Printf("✅ déployée + vérifiée, ancienne purgée (%d ligne(s))\n", nb)
+	}
+	fmt.Printf("— %d OK / %d en erreur\n", len(nodes)-fail, fail)
+	if fail > 0 {
+		return fmt.Errorf("%d node(s) en échec : ancienne clé conservée, .prev en place", fail)
+	}
+	cleanup()
+	fmt.Println("🧹 .prev nettoyés : rotation terminée.")
+	return nil
+}
+
+// discoverNodes découvre le cluster via le seed avec la dédiée puis la seed.
+func discoverNodes(ctx context.Context, nodesFile string, newKey, seedKey, knownHosts, seed string) ([]cluster.Discovered, string, error) {
+	nodes, err := config.LoadNodes(nodesFile)
+	if err != nil {
+		return nil, "", err
+	}
+	seedHost := seed
+	if seedHost == "" {
+		if len(nodes) == 0 {
+			return nil, "", fmt.Errorf("nodes.yaml vide et --seed absent")
+		}
+		seedHost = nodes[0].IP
+	} else {
+		for _, n := range nodes {
+			if n.Name == seed {
+				seedHost = n.IP
+			}
+		}
+	}
+	mkPool := func(key string) (*sshpool.Pool, error) {
+		return sshpool.New(sshpool.Options{User: "root", KeyFile: key, KnownHostsFile: knownHosts})
+	}
+	pool, err := mkPool(newKey)
+	if err != nil {
+		return nil, "", err
+	}
+	defer pool.Close()
+	if _, err := pool.Run(ctx, seedHost, "hostname"); err != nil {
+		if seedKey == "" {
+			return nil, "", fmt.Errorf("seed %s injoignable avec la clé dédiée (et pas de --seed-key) : %w", seedHost, err)
+		}
+		fmt.Fprintf(os.Stderr, "⚠️ clé dédiée KO sur %s, bascule seed pour la découverte\n", seedHost)
+		pool.Close()
+		pool, err = sshpool.New(sshpool.Options{User: "root", KeyFile: seedKey, KnownHostsFile: knownHosts, AcceptNewKeys: true})
+		if err != nil {
+			return nil, "", err
+		}
+		defer pool.Close()
+	}
+	disc, err := cluster.Discover(ctx, pool.Run, seedHost)
+	if err != nil {
+		return nil, "", err
+	}
+	if errs := cluster.ResolveAll(ctx, pool.Run, seedHost, disc); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "⚠️ %v\n", e)
+		}
+	}
+	return disc, seedHost, nil
+}
+
+// runReconcile découvre le cluster et converge la clé dédiée partout.
+func runReconcile(ctx context.Context, nodesFile string, only map[string]bool, newKey, seedKey, knownHosts, seed, pub string) error {
+	nodes, err := config.LoadNodes(nodesFile)
+	if err != nil {
+		return err
+	}
+	disc, seedHost, err := discoverNodes(ctx, nodesFile, newKey, seedKey, knownHosts, seed)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "🔍 cluster vu depuis %s : %d node(s)\n", seedHost, len(disc))
+	plan := cluster.Reconcile(nodes, disc)
+	for _, d := range plan.New {
+		fmt.Fprintf(os.Stderr, "➕ nouveau dans le cluster : %s (%s)\n", d.Name, d.IP)
+	}
+	for _, g := range plan.Gone {
+		fmt.Fprintf(os.Stderr, "➖ dans le fichier mais plus dans le cluster : %s\n", g.Name)
+	}
+
+	type target struct{ name, ip string }
+	var targets []target
+	seen := map[string]bool{}
+	for _, p := range plan.Matched {
+		ip := p.File.IP
+		if p.Live.IP != "" && p.Live.IP != ip {
+			fmt.Fprintf(os.Stderr, "🔁 %s : IP fichier %s ≠ cluster %s → cluster gagne\n", p.File.Name, ip, p.Live.IP)
+			ip = p.Live.IP
+		}
+		targets = append(targets, target{p.File.Name, ip})
+		seen[p.File.Name] = true
+	}
+	for _, d := range plan.New {
+		if d.IP == "" {
+			fmt.Fprintf(os.Stderr, "❌ %s sans IP : ignoré (ajoutez-le à %s)\n", d.Name, nodesFile)
+			continue
+		}
+		targets = append(targets, target{d.Name, d.IP})
+	}
+
+	var withKey []target
+	for _, t := range targets {
+		if len(only) > 0 && !only[t.name] {
+			continue
+		}
+		withKey = append(withKey, t)
+	}
+	if len(withKey) == 0 {
+		return fmt.Errorf("aucune cible après filtre")
+	}
+
+	mkPool := func(key string, acceptNew bool) (*sshpool.Pool, error) {
+		return sshpool.New(sshpool.Options{User: "root", KeyFile: key, KnownHostsFile: knownHosts, AcceptNewKeys: acceptNew})
+	}
+	mainPool, err := mkPool(newKey, false)
+	if err != nil {
+		return err
+	}
+	defer mainPool.Close()
+	var seedPool *sshpool.Pool
+	if seedKey != "" {
+		seedPool, err = mkPool(seedKey, true)
+		if err != nil {
+			return err
+		}
+		defer seedPool.Close()
+	}
+
+	fail := 0
+	for _, t := range withKey {
+		fmt.Printf("→ %s (%s)… ", t.name, t.ip)
+		if err := bootstrap.EnsureAuthorizedKey(ctx, mainPool.Run, t.ip, pub); err != nil {
+			if seedPool == nil {
+				fmt.Printf("❌ %v (pas de --seed-key de secours)\n", err)
+				fail++
+				continue
+			}
+			if err := bootstrap.EnsureAuthorizedKey(ctx, seedPool.Run, t.ip, pub); err != nil {
+				fmt.Printf("❌ seed aussi : %v\n", err)
+				fail++
+				continue
+			}
+		}
+		if _, err := mainPool.Run(ctx, t.ip, "hostname"); err != nil {
+			// la pool cache peut-être une vieille connexion : drop + retry via re-dial interne
+			fmt.Printf("❌ vérif : %v\n", err)
+			fail++
+			continue
+		}
+		fmt.Println("✅ convergé")
+	}
+	fmt.Printf("— %d OK / %d en erreur\n", len(withKey)-fail, fail)
+	if fail > 0 {
+		return fmt.Errorf("%d node(s) en échec", fail)
+	}
+	return nil
+}
+
+// cmdCluster implémente `cluster discover`.
+func cmdCluster(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("cluster discover", flag.ContinueOnError)
+	if len(args) < 1 || args[0] != "discover" {
+		return fmt.Errorf("usage : pve-orchestrator cluster discover [options]")
+	}
+	nodesFile := fs.String("nodes-file", "configs/nodes.yaml", "fichier des nodes")
+	seed := fs.String("seed", "", "nom/IP seed (défaut : 1er node du fichier)")
+	newKey := fs.String("key", "~/.ssh/pve-orchestrator_ed25519", "clé dédiée")
+	seedKey := fs.String("seed-key", "", "clé seed de secours")
+	knownHosts := fs.String("known-hosts", "~/.ssh/known_hosts", "known_hosts")
+	sync := fs.Bool("sync", false, "ajoute les nouveaux nodes à nodes.yaml (.bak)")
+	out := fs.String("out", "", "fichier JSON de sortie (défaut : stdout)")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	disc, seedHost, err := discoverNodes(ctx, *nodesFile, *newKey, *seedKey, *knownHosts, *seed)
+	if err != nil {
+		return err
+	}
+	nodes, err := config.LoadNodes(*nodesFile)
+	if err != nil {
+		return err
+	}
+	plan := cluster.Reconcile(nodes, disc)
+
+	data, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		return err
+	}
+	if *out != "" {
+		if err := os.WriteFile(*out, append(data, '\n'), 0o644); err != nil {
+			return err
+		}
+	} else {
+		fmt.Println(string(data))
+	}
+	fmt.Fprintf(os.Stderr, "🔍 seed %s : %d matchés, %d nouveaux, %d disparus\n",
+		seedHost, len(plan.Matched), len(plan.New), len(plan.Gone))
+
+	if *sync {
+		added := 0
+		known := map[string]bool{}
+		for _, n := range nodes {
+			known[n.Name] = true
+		}
+		for _, d := range plan.New {
+			if d.IP == "" || known[d.Name] {
+				continue
+			}
+			nodes = append(nodes, config.Node{Name: d.Name, IP: d.IP, Role: "standard"})
+			added++
+		}
+		if added == 0 {
+			fmt.Fprintln(os.Stderr, "💾 rien à synchroniser")
+			return nil
+		}
+		raw, err := os.ReadFile(*nodesFile)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(*nodesFile+".bak", raw, 0o644); err != nil {
+			return err
+		}
+		out, err := yaml.Marshal(config.NodesFile{Nodes: nodes})
+		if err != nil {
+			return err
+		}
+		header := "# Généré/étendu par `cluster discover --sync` — backup : " + *nodesFile + ".bak\n"
+		if err := os.WriteFile(*nodesFile, append([]byte(header), out...), 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "💾 %d node(s) ajoutés à %s\n", added, *nodesFile)
+	}
 	return nil
 }

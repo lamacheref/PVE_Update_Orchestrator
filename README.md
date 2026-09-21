@@ -27,6 +27,17 @@ go build -ldflags "-X main.version=$(cat VERSION)" -o pve-orchestrator .
 
 # 🗺️ Lot 0 : inventaire réel du cluster
 ./pve-orchestrator inventory sync --out inventory.json
+
+# 🔍 Autonomie : découverte depuis Proxmox (pvecm nodes + getent)
+./pve-orchestrator cluster discover --seed Janus
+./pve-orchestrator cluster discover --seed Janus --sync   # ajoute les nouveaux à nodes.yaml (.bak)
+
+# 🤖 Convergence clé sur tout le cluster découvert (seed unique suffit)
+./pve-orchestrator bootstrap-ssh --reconcile --seed Janus --seed-key ~/.ssh/flamachere_pro_20260511 --yes
+
+# 🔄 Rotation (nouvelle clé déployée+vérifiée, ancienne révoquée) / 🧹 purge
+./pve-orchestrator bootstrap-ssh --rotate --seed-key ~/.ssh/flamachere_pro_20260511 --yes
+./pve-orchestrator bootstrap-ssh --revoke --yes
 ```
 
 | 📄 Doc | 🎯 Contenu |

@@ -17,6 +17,7 @@
 - [x] `internal/config` (YAML + `.env`, jamais de secrets en git)
 - [x] `bootstrap-ssh` (clé dédiée via seed, `known_hosts`, rotation/révocation)
 - [x] `inventory sync` réel sur les 7 nodes (code + tests fixtures)
+- [x] `cluster discover` (pvecm nodes + getent, match insensible à la casse, `--sync` vers nodes.yaml) + `bootstrap-ssh --reconcile/--rotate/--revoke` (convergence et purge autonomes) 🤖
 - [x] Run réel `bootstrap-ssh --yes` + `inventory sync` : Janus ✅ (quorum, 3 guests, kernel `7.0.14-17-pve`) — 6 nodes restants
 - [x] CI verte des deux côtés (`build/vet/test` + releases) ✅
 

@@ -171,6 +171,7 @@ pve-orchestrator bootstrap-ssh --seed-key ~/.ssh/flamachere_pro_20260511
 - 🙈 La seed **ne sert plus jamais** en run courant
 - 🔄 Rotation : `bootstrap-ssh --rotate` (annuelle) • révocation : `bootstrap-ssh --revoke`
 - 🚫 Clé privée **jamais en git** (`.gitignore` + `gitleaks`)
+- 🤖 **Autonomie** : `cluster discover` réconcilie `nodes.yaml` avec `pvecm nodes` (match insensible à la casse, IPs via `getent`, `--sync` auto) ; `bootstrap-ssh --reconcile` converge la clé sur tout le cluster depuis une seed unique (dédiée d'abord, seed en secours) ; `--rotate` déploie la nouvelle, la vérifie, puis révoque l'ancienne (match sur le matériau de clé) ; `--revoke` purge les lignes du projet.
 
 ### 5.4 🌐 Bonus PVE API
 
