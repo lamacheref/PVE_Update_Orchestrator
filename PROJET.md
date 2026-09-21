@@ -176,6 +176,8 @@ pve-orchestrator bootstrap-ssh --seed-key ~/.ssh/flamachere_pro_20260511
 
 Si token API dispo → lectures inventaire/statut en **HTTPS API** (moins de SSH), exécutions toujours en SSH/`pct exec` (plus fiable que l'agent seul).
 
+> ✅ **Décision actée : SSH-only.** Pas de token API avant la v1.0 au plus tôt (zéro secret supplémentaire, parsing `pvecm/qm/pct` suffisant et testé). Réévaluer en Lot 2 si besoin.
+
 ---
 
 ## 🔄 6. Workflow — ce que fait le robot 🤖

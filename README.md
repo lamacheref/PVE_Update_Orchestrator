@@ -61,12 +61,13 @@ Conventions de commits : `feat:` → bump `m`, sinon bump `f`. Le bump `M` exige
 2. 🏗️ **build** — `go vet`, `go test`, binaires `linux/amd64` + `linux/arm64` + `SHA256SUMS.txt` (artefacts GitHub)
 3. 📦 **gitea-release** — crée la release sur Gitea et y téléverse les binaires
 
-🔑 Secrets GitHub requis :
+🔑 Secrets GitHub requis (auth basique Gitea : user + token en mot de passe) :
 
 | Secret | 📝 Valeur |
 |---|---|
-| `GITEA_URL` | URL HTTP(S) du Gitea (ex. `https://gitea.smiden.eu`) |
-| `GITEA_TOKEN` | Token utilisateur Gitea (droits `write:repository`) |
+| `REGISTRY_USER` | Utilisateur Gitea (existant) |
+| `REGISTRY_TOKEN` | Token Gitea avec droits `write:repository` (existant) |
+| `REGISTRY_URL` | Optionnel : surcharge l'URL API (défaut `https://gitea.smiden.eu`, dérivée du remote git) |
 
 ---
 

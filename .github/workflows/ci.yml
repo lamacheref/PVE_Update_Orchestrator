@@ -118,27 +118,30 @@ jobs:
 
       - name: Publie la release sur Gitea
         env:
-          GITEA_URL: ${{ secrets.GITEA_URL }}
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          # Auth basique Gitea : user + token en mot de passe.
+          # URL dérivée du remote git ; surchargeable via secret REGISTRY_URL.
+          GITEA_URL: ${{ secrets.REGISTRY_URL || 'https://gitea.smiden.eu' }}
+          GITEA_USER: ${{ secrets.REGISTRY_USER }}
+          GITEA_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
           V="$(tr -d '[:space:]' <VERSION)"
           TAG="v$V"
           REPO="flamachere/PVE_Update_Orchestrator"
+          AUTH="$GITEA_USER:$GITEA_TOKEN"
           BODY="$(awk "/^## \\[$V\\]/{flag=1;next}/^## \\[/{flag=0}flag" CHANGELOG.md | head -40)"
           [ -z "$BODY" ] && BODY="Release $TAG"
           PAYLOAD="$(jq -n --arg t "$TAG" --arg b "$BODY" \
             '{tag_name:$t, name:$t, body:$b, draft:false, prerelease:false}')"
-          ID="$(curl -sS -X POST "$GITEA_URL/api/v1/repos/$REPO/releases" \
-            -H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' \
+          ID="$(curl -sS -u "$AUTH" -X POST "$GITEA_URL/api/v1/repos/$REPO/releases" \
+            -H 'Content-Type: application/json' \
             -d "$PAYLOAD" | jq -r '.id // empty')"
           if [ -z "$ID" ]; then
-            ID="$(curl -sS "$GITEA_URL/api/v1/repos/$REPO/releases/tags/$TAG" \
-              -H "Authorization: token $GITEA_TOKEN" | jq -r '.id // empty')"
+            ID="$(curl -sS -u "$AUTH" "$GITEA_URL/api/v1/repos/$REPO/releases/tags/$TAG" | jq -r '.id // empty')"
           fi
           [ -z "$ID" ] && { echo "release Gitea introuvable" >&2; exit 1; }
           for f in dist/*; do
             echo "⬆️ $(basename "$f")"
-            curl -sS -X POST "$GITEA_URL/api/v1/repos/$REPO/releases/$ID/assets?name=$(basename "$f")" \
-              -H "Authorization: token $GITEA_TOKEN" --data-binary "@$f" >/dev/null
+            curl -sS -u "$AUTH" -X POST "$GITEA_URL/api/v1/repos/$REPO/releases/$ID/assets?name=$(basename "$f")" \
+              --data-binary "@$f" >/dev/null
           done
