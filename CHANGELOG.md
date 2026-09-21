@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.1.0] - 2026-09-21
+
+- feat: docs README/TODO/CHANGELOG/ROADMAP + versionning M.m.f + CI github-vers-gitea (57df2bb)
+- docs: PROJET.md logiciel Go + fix mermaid + remotes gitea/github synchro (6f9a6fe)
+
 
 ## [0.0.1] - 2026-09-21
 
