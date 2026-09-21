@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.4.4] - 2026-09-21
+
+- merge: bump CI (ba289cd)
+- fix: grep -c exit 1 + defaut stockage PBS reel (pbs) (2d47628)
+
 ## [0.4.3] - 2026-09-21
 
 - merge: bump CI (60e0e46)
