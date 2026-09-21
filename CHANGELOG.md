@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.4.5] - 2026-09-21
+
+- merge: bump CI (2898276)
+- docs: assainissement flotte checkmk + datacenter UTF-8 + nas automount (81e1235)
+
 ## [0.4.4] - 2026-09-21
 
 - merge: bump CI (ba289cd)
