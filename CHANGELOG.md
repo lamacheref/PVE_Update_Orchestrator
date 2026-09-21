@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.5.2] - 2026-09-21
+
+- merge: bump CI (6229704)
+- fix: kernel regex anti-pollution shell + --update-timeout 60m (99c047c)
+
 ## [0.5.1] - 2026-09-21
 
 - merge: bump CI (d00e0b4)
