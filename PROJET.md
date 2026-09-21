@@ -253,6 +253,7 @@ pve-orchestrator serve --listen :8080
 | 🔍 Vérification | Snapshot listé + taille > 0 + log OK, enregistré en base `{run_id, vmid, node, snapshot, size}` |
 | 🧹 Rétention | Prune auto post-run OK (`--daily 7 --weekly 4`) |
 | ↩️ Rollback guest | `stop + pct restore / qmrestore + start + post-check + embed` 🔔 |
+| 🔁 Concurrence backup | jamais de 2e `vzdump` si un backup tourne déjà (attente bornée `--backup-wait` puis report rejoué au run suivant) ; PBS vérifié **actif** (`pvesm status`) avant chaque backup ; timeout backup **illimité** par défaut (`--backup-timeout`), heartbeat 5 min |
 
 > ⚠️ **Limite assumée nodes** : pas de snapshot possible → rollback = journal apt + `proxmox-boot-tool kernel pin <prev>` + restore `/etc` (etckeeper).
 

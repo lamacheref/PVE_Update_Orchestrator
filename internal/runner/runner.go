@@ -27,21 +27,23 @@ type Runner func(ctx context.Context, host, cmd string) (string, error)
 
 // Options du run.
 type Options struct {
-	RunID       string
-	NodeFilter  map[string]bool
-	VMIDs       map[int]bool
-	Only        string // "" | "os" | "docker"
-	Skip        map[string]bool
-	DryRun      bool
-	AutoReboot  bool
-	CanaryFirst bool
-	Workers     int
-	PBSStorage  string
-	KeepKernels int
-	PruneAll    bool
-	StateDir    string
-	Resume      string // run-id à reprendre ("" = nouveau run)
-	WebhookURL  string // "" = Discord désactivé (log stderr)
+	RunID         string
+	NodeFilter    map[string]bool
+	VMIDs         map[int]bool
+	Only          string // "" | "os" | "docker"
+	Skip          map[string]bool
+	DryRun        bool
+	AutoReboot    bool
+	CanaryFirst   bool
+	Workers       int
+	PBSStorage    string
+	KeepKernels   int
+	PruneAll      bool
+	BackupTimeout time.Duration // 0 = suivi illimité
+	BackupWait    time.Duration // attente max backup tiers (<=0 = report immédiat)
+	StateDir      string
+	Resume        string // run-id à reprendre ("" = nouveau run)
+	WebhookURL    string // "" = Discord désactivé (log stderr)
 }
 
 // TargetResult enrichit update.Result des checks.
@@ -142,8 +144,8 @@ func Run(ctx context.Context, run Runner, nodes []config.Node, o Options) (*RunS
 		st.RunID = prev.RunID
 		for k, v := range prev.Targets {
 			st.Targets[k] = v
-			if v.OK {
-				done[k] = true
+			if v.OK && !v.Hold {
+				done[k] = true // holds/skips rejoués au resume (cause peut-être réglée)
 			}
 		}
 		fmt.Fprintf(os.Stderr, "⏯️ reprise %s : %d cible(s) déjà OK\n", o.Resume, len(done))
@@ -161,7 +163,8 @@ func Run(ctx context.Context, run Runner, nodes []config.Node, o Options) (*RunS
 	nodes = config.FilterNodes(nodes, o.NodeFilter)
 	nodes = orderNodes(nodes, o.CanaryFirst)
 	uo := update.Options{DryRun: o.DryRun, AutoReboot: o.AutoReboot, KeepKernels: o.KeepKernels,
-		PBSStorage: o.PBSStorage, PruneAll: o.PruneAll}
+		PBSStorage: o.PBSStorage, PruneAll: o.PruneAll,
+		BackupTimeout: o.BackupTimeout, BackupWait: o.BackupWait}
 
 	// Inventaire guests (lecture seule, même en dry-run).
 	var guests []inventory.Guest
@@ -272,6 +275,9 @@ func runGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Guest,
 	}
 	pre := health.CheckGuest(ctx, health.Runner(run), nodeIP, g)
 	res := update.UpdateGuest(ctx, update.Runner(run), nodeIP, g, uo, runID)
+	if res.Skipped {
+		return TargetResult{Result: res, Pre: pre, Hold: true}
+	}
 	if res.OK && (o.Only == "" || o.Only == "docker") {
 		dres := update.UpdateDocker(ctx, update.Runner(run), nodeIP, g, uo)
 		res.Log = append(res.Log, dres.Log...)

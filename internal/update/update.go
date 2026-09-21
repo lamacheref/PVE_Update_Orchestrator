@@ -7,6 +7,7 @@ package update
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -24,12 +25,14 @@ type Runner func(ctx context.Context, host, cmd string) (string, error)
 
 // Options du run.
 type Options struct {
-	DryRun      bool
-	AutoReboot  bool
-	KeepKernels int
-	PBSStorage  string
-	PruneAll    bool // docker image prune -a (défaut : system prune seul)
-	RebootWait  time.Duration
+	DryRun        bool
+	AutoReboot    bool
+	KeepKernels   int
+	PBSStorage    string
+	PruneAll      bool // docker image prune -a (défaut : system prune seul)
+	RebootWait    time.Duration
+	BackupTimeout time.Duration // 0 = suivi illimité (annulable via ctx)
+	BackupWait    time.Duration // attente max d'un backup tiers (<=0 = report immédiat)
 }
 
 // Result résume la mise à jour d'une cible.
@@ -44,6 +47,7 @@ type Result struct {
 	KernelAfter  string   `json:"kernel_after"`
 	Rebooted     bool     `json:"rebooted"`
 	BackupID     string   `json:"backup_id,omitempty"`
+	Skipped      bool     `json:"skipped,omitempty"` // reporté (ex. backup déjà en cours), à rejouer
 	Duration     string   `json:"duration"`
 	Log          []string `json:"log,omitempty"`
 	Error        string   `json:"error,omitempty"`
@@ -419,23 +423,6 @@ func firstLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// BackupGuest snapshotte un guest vers PBS (fail-closed, jusqu'à 60 min).
-func BackupGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Guest, storage, runID string) (string, error) {
-	bctx, cancel := step(ctx, 60*time.Minute)
-	defer cancel()
-	out, err := run(bctx, nodeIP, fmt.Sprintf("vzdump %d --mode snapshot --storage %s --compress zstd --notes-template 'pre-update %s'",
-		g.VMID, storage, runID))
-	if err != nil {
-		return "", fmt.Errorf("vzdump : %w (sortie : %s)", err, truncate(out, 300))
-	}
-	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "Finished Backup") {
-			return backupVolume(out), nil
-		}
-	}
-	return "", fmt.Errorf("vzdump sans marqueur Finished Backup (sortie : %s)", truncate(out, 300))
-}
-
 var reBackupVol = regexp.MustCompile(`Backup Volume:\s*(\S+)`)
 
 func backupVolume(out string) string {
@@ -455,9 +442,20 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 	}
 
 	if !o.DryRun {
-		progress(r.Target, "backup PBS snapshot")
-		id, err := BackupGuest(ctx, run, nodeIP, g, o.PBSStorage, runID)
+		progress(r.Target, "vérif PBS + backup snapshot")
+		if ok, info := PBSOnline(ctx, run, nodeIP, o.PBSStorage); !ok {
+			r.fail("PBS %s indisponible : %s (fail-closed, aucune modif)", o.PBSStorage, info)
+			return r
+		}
+		id, err := BackupGuest(ctx, run, nodeIP, g, o, runID)
 		if err != nil {
+			if errors.Is(err, ErrBackupBusy) {
+				r.Skipped = true
+				r.OK = true
+				r.note("reporté : backup déjà en cours (rejoué au prochain run)")
+				r.Duration = time.Since(t0).Round(time.Second).String()
+				return r
+			}
 			r.fail("backup PBS (fail-closed) : %v", err)
 			return r
 		}

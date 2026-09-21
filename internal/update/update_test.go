@@ -87,12 +87,12 @@ func TestBackupGuestVerify(t *testing.T) {
 		}
 		return "", errors.New("x")
 	}
-	id, err := BackupGuest(context.Background(), run, "h", inventory.Guest{VMID: 100, Kind: "lxc", Name: "t"}, "pbs", "r1")
+	id, err := BackupGuest(context.Background(), run, "h", inventory.Guest{VMID: 100, Kind: "lxc", Name: "t", Node: "Janus"}, Options{PBSStorage: "pbs"}, "r1")
 	if err != nil || id == "" {
 		t.Errorf("id=%q err=%v", id, err)
 	}
 	runFail := func(_ context.Context, host, cmd string) (string, error) { return "INFO: boom", nil }
-	if _, err := BackupGuest(context.Background(), runFail, "h", inventory.Guest{VMID: 100, Kind: "lxc", Name: "t"}, "pbs", "r1"); err == nil {
+	if _, err := BackupGuest(context.Background(), runFail, "h", inventory.Guest{VMID: 100, Kind: "lxc", Name: "t", Node: "Janus"}, Options{PBSStorage: "pbs"}, "r1"); err == nil {
 		t.Error("fail-closed attendu sans marqueur Finished Backup")
 	}
 }

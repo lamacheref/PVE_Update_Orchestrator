@@ -38,6 +38,12 @@ func fakeOK(failNode string) Runner {
 			return "VMID NAME STATUS MEM\n", nil
 		case strings.HasPrefix(cmd, "vzdump"):
 			return "INFO: Backup Volume: pbs:backup/vzdump-lxc-100-x.zst\nINFO: Finished Backup\n", nil
+		case strings.HasPrefix(cmd, "pvesm status"):
+			return "Name Type Status\npbs pbs active 1 2 3\n", nil
+		case strings.Contains(cmd, "/tasks"):
+			return "[]", nil
+		case strings.Contains(cmd, "ps -eo args"):
+			return "", nil
 		case strings.Contains(cmd, "dpkg -l"):
 			return "ii  pve-kernel-6.8.12-4-pve amd64 x\nii  pve-kernel-6.8 amd64 meta\n", nil
 		case strings.Contains(cmd, "topgrade"), strings.Contains(cmd, "apt-get"), strings.Contains(cmd, "proxmox-boot-tool"):
