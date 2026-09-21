@@ -8,3 +8,5 @@
 /bin/
 /dist/
 /pve-orchestrator
+/inventory*.json
+/state/

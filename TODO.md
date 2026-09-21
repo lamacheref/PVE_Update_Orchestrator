@@ -9,7 +9,7 @@
 - [x] VERSION `0.0.1` + `scripts/bump.sh` (M manuel, m/f auto)
 - [x] CI GitHub → artefacts vers Gitea
 - [x] Releases vérifiées des deux côtés (GitHub + Gitea, binaires `linux-amd64/arm64` + `SHA256SUMS.txt`) 📦
-- [ ] Régénérer le webhook Discord exposé + `.env` (mode 600) 🔒
+- [x] Webhook Discord : rotation refusée (canal privé verrouillé, risque assumé — voir PROJET.md §8) ; reste à l'externaliser dans `/etc/pve-orchestrator/.env` (mode 600) au Lot 1 🔒
 
 ## 🌱 Lot 0 — Socle (~1 sem) → v0.2.0
 
@@ -17,8 +17,8 @@
 - [x] `internal/config` (YAML + `.env`, jamais de secrets en git)
 - [x] `bootstrap-ssh` (clé dédiée via seed, `known_hosts`, rotation/révocation)
 - [x] `inventory sync` réel sur les 7 nodes (code + tests fixtures)
-- [ ] Run réel `bootstrap-ssh --yes` + `inventory sync` sur le cluster (touche la prod — à confirmer)
-- [ ] CI verte (`build/vet/test`) ✅
+- [x] Run réel `bootstrap-ssh --yes` + `inventory sync` : Janus ✅ (quorum, 3 guests, kernel `7.0.14-17-pve`) — 6 nodes restants
+- [x] CI verte des deux côtés (`build/vet/test` + releases) ✅
 
 ## 🚀 Lot 1 — MVP (~1-2 sem) → v0.3.0
 

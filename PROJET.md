@@ -261,7 +261,7 @@ pve-orchestrator serve --listen :8080
 ## 🔔 8. Discord bot-alarm — zéro silence 🤫➡️📣
 
 > 🔒 `DISCORD_WEBHOOK_UPDATEUR` **uniquement** dans `/etc/pve-orchestrator/.env` (mode 600).
-> ⚠️ **Webhook historique exposé dans git → à régénérer + `git rm --cached` !**
+> ✅ **Décision actée : pas de rotation.** Le webhook historique est verrouillé en écriture sur un seul canal privé ultra-restreint, sans droits admin. Risque résiduel assumé et documenté : quiconque détient l'URL peut poster sur `bot-alarm` — à réévaluer si le dépôt devient public ou si l'audience change.
 
 | 💬 Message | 🎨 Contenu |
 |---|---|
@@ -336,7 +336,7 @@ pve-orchestrator serve --listen :8080
 
 ### 🔔 12.3 Webhook Discord
 
-> ⚠️ Secret historiquement exposé : **régénérer** le webhook `bot-alarm`, le placer dans `/etc/pve-orchestrator/.env`, purger l'historique. **Aucune URL en clair ici** 🙈.
+> ✅ Rotation refusée (voir §8 : canal privé verrouillé, risque assumé). Webhook à placer dans `/etc/pve-orchestrator/.env`. **Aucune URL en clair ici** 🙈.
 
 ### 🌐 12.4 Dépôts distants — Gitea (principal) + GitHub (miroir)
 
