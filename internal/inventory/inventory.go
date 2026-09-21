@@ -41,14 +41,14 @@ type NodeInfo struct {
 }
 
 var (
-	reQuorum = regexp.MustCompile(`(?m)^\s*Quorat(?:e|um):\s*(Yes|No)`)
+	reQuorum = regexp.MustCompile(`(?m)^\s*(Quorate|Quorum):\s*(Yes|No)`)
 	reNodes  = regexp.MustCompile(`(?m)^\s*Nodes:\s*(\d+)`)
 )
 
 // ParseQuorum lit pvecm status (gère "Quorate:" et "Quorum:").
 func ParseQuorum(out string) bool {
 	m := reQuorum.FindStringSubmatch(out)
-	return len(m) == 2 && m[1] == "Yes"
+	return len(m) == 3 && m[2] == "Yes"
 }
 
 // ParseNodeCount lit "Nodes: N" de pvecm status (0 si absent).

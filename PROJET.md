@@ -187,15 +187,14 @@ Si token API dispo → lectures inventaire/statut en **HTTPS API** (moins de SSH
 # 🗺️ Synchroniser l'inventaire réel
 pve-orchestrator inventory sync --nodes Janus,Zeus,Nyx,Loki,Aphrodite,Atlas,Artemis
 
-# 🔍 Audit sans toucher (toujours commencer par là !)
-pve-orchestrator run --all --dry-run
+# 🔍 Audit sans toucher (défaut, toujours commencer par là !)
+pve-orchestrator run --all
 
-# 🐤 Canary : Janus d'abord, puis pause
-pve-orchestrator run --nodes Janus --canary-first
+# 🚀 LIVE (exige --apply --yes, dry-run par défaut)
+pve-orchestrator run --nodes Janus --canary-first --apply --yes
 
 # 🎯 Ciblage fin
-pve-orchestrator run --vmids 100,101 --only os
-pve-orchestrator run --tags docker --only docker
+pve-orchestrator run --vmids 100,101 --only os --apply --yes
 
 # ⏯️ Reprise après reboot node (idempotent !)
 pve-orchestrator run --resume --run-id 20260919-0200

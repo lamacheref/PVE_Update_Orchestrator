@@ -25,8 +25,17 @@ go build -ldflags "-X main.version=$(cat VERSION)" -o pve-orchestrator .
 ./pve-orchestrator bootstrap-ssh --seed-key ~/.ssh/flamachere_pro_20260511 --nodes Janus --yes
 ./pve-orchestrator bootstrap-ssh --seed-key ~/.ssh/flamachere_pro_20260511 --yes
 
-# 🗺️ Lot 0 : inventaire réel du cluster
-./pve-orchestrator inventory sync --out inventory.json
+# 🔍 Lot 1 : plan dry-run (défaut, sans toucher)
+./pve-orchestrator run --nodes Janus --canary-first --state-dir state
+
+# 🚀 Lot 1 : LIVE (exige --apply --yes)
+./pve-orchestrator run --nodes Janus --canary-first --apply --yes --state-dir state
+./pve-orchestrator run --vmids 100 --only os --apply --yes
+./pve-orchestrator run --resume 20260921-1229 --apply --yes
+
+# 🖥️ Dashboard lecture seule (lit state/)
+./pve-orchestrator inventory sync --out state/inventory-$(date +%F).json
+./pve-orchestrator serve --listen :8080 --state-dir state
 
 # 🔍 Autonomie : découverte depuis Proxmox (pvecm nodes + getent)
 ./pve-orchestrator cluster discover --seed Janus

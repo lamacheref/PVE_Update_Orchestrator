@@ -23,12 +23,14 @@
 
 ## 🚀 Lot 1 — MVP (~1-2 sem) → v0.3.0
 
-- [ ] `runner` (rolling 1 node, worker-pool guests, resume, verrou)
-- [ ] `health` (pré/post-checks)
-- [ ] `update` node + guest (topgrade, autoremove, kernel)
-- [ ] `discord` (start + embed/cible + synthèse)
-- [ ] `serve` lecture seule + dashboard carte/timeline
-- [ ] Canary Janus + 1 guest `--dry-run` puis réel 🐤
+- [x] `runner` (rolling 1 node, worker-pool guests, resume, verrou)
+- [x] `health` (pré/post-checks — HOLD réel validé sur Janus : 2 unités tierces en échec)
+- [x] `update` node + guest (topgrade, autoremove, kernel, kernel-clean natif, backup PBS fail-closed)
+- [x] `discord` (start + embed/cible + synthèse, retry, idempotent)
+- [x] `serve` lecture seule + dashboard (runs, détail, polling 5s)
+- [ ] Run dry-run complet 7 nodes (lecture seule) 🔍
+- [ ] Canary Janus + 1 guest `--apply --yes` puis réel 🐤
+- [ ] Webhook Discord dans `/etc/pve-orchestrator/.env` + premier run notifié 🔔
 
 ## 💪 Lot 2 — Durcissement (~1-2 sem) → v0.3.0+
 

@@ -41,8 +41,8 @@ func TestParseQuorum(t *testing.T) {
 	if ParseQuorum("Quorate:          No\n") {
 		t.Error("quorum No attendu")
 	}
-	if ParseQuorum("Quorum: Yes\n") {
-		t.Error("forme Quorum: acceptée (tolérance)")
+	if !ParseQuorum("Quorum: Yes\n") {
+		t.Error("forme Quorum: acceptée aussi")
 	}
 	if ParseQuorum("vide") {
 		t.Error("faux positif sur sortie vide")

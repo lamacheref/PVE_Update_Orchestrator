@@ -1,0 +1,13 @@
+body { font-family: system-ui, sans-serif; margin: 0; background: #14161a; color: #e8e8e8; }
+header { background: #1f232b; padding: 1rem 2rem; }
+h1 { margin: 0; font-size: 1.4rem; }
+main { padding: 1rem 2rem; max-width: 1100px; }
+.cards { display: flex; flex-wrap: wrap; gap: .6rem; }
+.card { background: #1f232b; border: 1px solid #333; border-radius: 8px; padding: .6rem .9rem; cursor: pointer; }
+.card:hover { border-color: #58a6ff; }
+.target { background: #1f232b; border: 1px solid #333; border-radius: 8px; padding: .6rem .9rem; margin: .5rem 0; }
+.pill { border-radius: 4px; padding: .1rem .5rem; font-size: .8rem; font-weight: bold; }
+.ok { background: #1f6f43; } .fail { background: #8f2b2b; } .hold { background: #7a6a1f; }
+pre { background: #0d1117; padding: .5rem; border-radius: 6px; overflow-x: auto; font-size: .8rem; }
+pre.err { color: #ff9d9d; }
+code { background: #0d1117; padding: .1rem .3rem; border-radius: 4px; }

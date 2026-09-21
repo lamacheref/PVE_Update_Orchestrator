@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/lamacheref/pve-update-orchestrator/internal/cluster"
 	"github.com/lamacheref/pve-update-orchestrator/internal/config"
 	"github.com/lamacheref/pve-update-orchestrator/internal/inventory"
+	"github.com/lamacheref/pve-update-orchestrator/internal/runner"
+	"github.com/lamacheref/pve-update-orchestrator/internal/server"
 	"github.com/lamacheref/pve-update-orchestrator/internal/sshpool"
 	"gopkg.in/yaml.v3"
 )
@@ -42,6 +45,10 @@ func main() {
 		err = cmdBootstrap(ctx, os.Args[2:])
 	case "cluster":
 		err = cmdCluster(ctx, os.Args[2:])
+	case "run":
+		err = cmdRun(ctx, os.Args[2:])
+	case "serve":
+		err = cmdServe(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "commande inconnue : %s\n", os.Args[1])
 		usage()
@@ -62,7 +69,9 @@ Usage:
   pve-orchestrator bootstrap-ssh --seed-key F [--nodes-file F] [--nodes A,B] [--key F] [--yes]
   pve-orchestrator bootstrap-ssh --reconcile [--seed H] [--seed-key F] [--yes]
   pve-orchestrator bootstrap-ssh --rotate --seed-key F [--yes]
-  pve-orchestrator bootstrap-ssh --revoke [--seed-key F] [--yes]`)
+  pve-orchestrator bootstrap-ssh --revoke [--seed-key F] [--yes]
+  pve-orchestrator run [--nodes A,B] [--vmids 100,101] [--only os|docker] [--skip T..] [--dry-run|--apply --yes] [--no-reboot] [--resume ID]
+  pve-orchestrator serve [--listen :8080] [--state-dir state]`)
 }
 
 func csvSet(s string) map[string]bool {
@@ -531,7 +540,127 @@ func runReconcile(ctx context.Context, nodesFile string, only map[string]bool, n
 	return nil
 }
 
-// cmdCluster implémente `cluster discover`.
+// cmdServe lance le dashboard lecture seule.
+func cmdServe(args []string) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	listen := fs.String("listen", ":8080", "adresse d'écoute")
+	stateDir := fs.String("state-dir", "state", "répertoire des runs")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return server.Listen(*listen, *stateDir)
+}
+
+// cmdRun orchestre un run hebdo (dry-run par défaut, live = --apply --yes).
+func cmdRun(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	nodesFile := fs.String("nodes-file", "configs/nodes.yaml", "fichier des nodes")
+	cfgFile := fs.String("config", "", "config.yaml (défauts SSH/PBS/Discord)")
+	onlyNodes := fs.String("nodes", "", "filtre CSV")
+	onlyVMIDs := fs.String("vmids", "", "filtre CSV (ex. 100,101)")
+	only := fs.String("only", "", "os | docker (défaut : tout)")
+	skip := fs.String("skip", "", "cibles à sauter CSV (ex. node/Zeus,lxc/100)")
+	dryRun := fs.Bool("dry-run", true, "plan sans toucher (défaut)")
+	apply := fs.Bool("apply", false, "EXÉCUTE vraiment (exige --yes)")
+	yes := fs.Bool("yes", false, "confirme le live")
+	autoReboot := fs.Bool("auto-reboot", true, "reboot si nouveau kernel")
+	noReboot := fs.Bool("no-reboot", false, "désactive les reboots")
+	canaryFirst := fs.Bool("canary-first", true, "canary d'abord")
+	workers := fs.Int("workers", 4, "parallélisme guests")
+	pbs := fs.String("pbs-storage", "pbs-pre-update", "datastore PBS (sans --config)")
+	keep := fs.Int("keep-kernels", 2, "kernels conservés (sans --config)")
+	pruneAll := fs.Bool("prune-all", false, "docker image prune -a")
+	stateDir := fs.String("state-dir", "state", "état runs + dashboard")
+	resume := fs.String("resume", "", "run-id à reprendre")
+	runID := fs.String("run-id", "", "run-id explicite")
+	user := fs.String("user", "root", "SSH (sans --config)")
+	key := fs.String("key", "~/.ssh/pve-orchestrator_ed25519", "clé (sans --config)")
+	knownHosts := fs.String("known-hosts", "~/.ssh/known_hosts", "known_hosts")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	live := *apply
+	if live && !*yes {
+		return fmt.Errorf("live refusé sans --yes (garde-fou)")
+	}
+	if !live && !*dryRun {
+		return fmt.Errorf("précisez --dry-run (plan) ou --apply --yes (live)")
+	}
+	if *only != "" && *only != "os" && *only != "docker" {
+		return fmt.Errorf("--only doit valoir os ou docker")
+	}
+
+	nodes, err := config.LoadNodes(*nodesFile)
+	if err != nil {
+		return err
+	}
+	var cfg *config.Config
+	if *cfgFile != "" {
+		c, err := config.LoadConfig(*cfgFile)
+		if err != nil {
+			return err
+		}
+		cfg = &c
+	}
+	pool, err := sshpool.New(sshOptionsFromFlags(nil, *user, *key, *knownHosts, cfg))
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	vmids := map[int]bool{}
+	for _, s := range strings.Split(*onlyVMIDs, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			id, err := strconv.Atoi(s)
+			if err != nil {
+				return fmt.Errorf("--vmids invalide %q", s)
+			}
+			vmids[id] = true
+		}
+	}
+	pbsStorage, keepKernels := *pbs, *keep
+	webhook := os.Getenv("DISCORD_WEBHOOK_UPDATEUR")
+	if cfg != nil {
+		pbsStorage, keepKernels = cfg.PBS.Storage, cfg.Update.KeepKernels
+		if w, err := cfg.DiscordWebhook(); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️ discord désactivé : %v\n", err)
+		} else {
+			webhook = w
+		}
+	}
+	o := runner.Options{
+		RunID: stRunID(*runID, *resume), NodeFilter: csvSet(*onlyNodes), VMIDs: vmids,
+		Only: *only, Skip: csvSet(*skip), DryRun: !live,
+		AutoReboot: *autoReboot && !*noReboot, CanaryFirst: *canaryFirst,
+		Workers: *workers, PBSStorage: pbsStorage, KeepKernels: keepKernels,
+		PruneAll: *pruneAll, StateDir: *stateDir, Resume: *resume, WebhookURL: webhook,
+	}
+	st, err := runner.Run(ctx, pool.Run, nodes, o)
+	if err != nil {
+		return err
+	}
+	ok, fail := 0, 0
+	for _, tr := range st.Targets {
+		if tr.OK && !tr.Hold {
+			ok++
+		} else if !tr.OK {
+			fail++
+		}
+	}
+	fmt.Fprintf(os.Stderr, "🏁 run %s : %d OK / %d FAIL (%d cibles)\n", st.RunID, ok, fail, len(st.Targets))
+	if fail > 0 {
+		return fmt.Errorf("%d cible(s) en échec", fail)
+	}
+	return nil
+}
+
+func stRunID(explicit, resume string) string {
+	if explicit != "" {
+		return explicit
+	}
+	return resume // "" = nouveau run (runner génère)
+}
 func cmdCluster(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("cluster discover", flag.ContinueOnError)
 	if len(args) < 1 || args[0] != "discover" {
