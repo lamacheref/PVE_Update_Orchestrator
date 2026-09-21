@@ -29,6 +29,7 @@
 - [x] `discord` (start + embed/cible + synthèse, retry, idempotent)
 - [x] `serve` lecture seule + dashboard (runs, détail, polling 5s)
 - [x] Run dry-run complet 7 nodes : 29 OK / 1 FAIL (HOLD Janus connu) / 3 HOLD-skipped — 33 cibles, agents QEMU OK 🔍
+- [x] Assainissement flotte : checkmk éradiqué partout (nodes Aphrodite/Loki, CT104/108, VM120 — scripts maintainer neutrés, user conservé sur CT104 car UID partagé avec postgres docker) ; `datacenter.cfg` re-encodé UTF-8 (é latin-1 → fini l'erreur vzdump) ; CIFS sftp en `x-systemd.automount` 🧹
 - [ ] Canary Janus + 1 guest `--apply --yes` puis réel 🐤
 - [ ] Webhook Discord dans `/etc/pve-orchestrator/.env` + premier run notifié 🔔
 
