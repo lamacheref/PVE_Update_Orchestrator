@@ -67,7 +67,8 @@ Conventions de commits : `feat:` → bump `m`, sinon bump `f`. Le bump `M` exige
 |---|---|
 | `REGISTRY_USER` | Utilisateur Gitea (existant) |
 | `REGISTRY_TOKEN` | Token Gitea avec droits `write:repository` (existant) |
-| `REGISTRY_URL` | Optionnel : surcharge l'URL API (défaut `https://gitea.smiden.eu`, dérivée du remote git) |
+
+URL API générée dans le workflow : `https://gitea.lamachere.fr` (domaine externe joignable depuis GitHub ; `gitea.smiden.eu` réservé au LAN/SSH). Noms `REGISTRY_*` uniquement, jamais `GITEA_*`.
 
 ---
 

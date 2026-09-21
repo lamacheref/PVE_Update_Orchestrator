@@ -87,10 +87,12 @@ jobs:
     if: github.repository == 'lamacheref/PVE_Update_Orchestrator' && (needs.version.outputs.changed == 'true' || github.event_name == 'workflow_dispatch')
     env:
       # Auth basique Gitea : user + token en mot de passe.
-      # URL dérivée du remote git ; surchargeable via secret REGISTRY_URL.
-      GITEA_URL: ${{ secrets.REGISTRY_URL || 'https://gitea.smiden.eu' }}
-      GITEA_USER: ${{ secrets.REGISTRY_USER }}
-      GITEA_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+      # Noms REGISTRY_* uniquement (pas de GITEA_*).
+      # URL générée : domaine externe joignable depuis GitHub
+      # (gitea.smiden.eu n'est pas routable depuis les runners).
+      REGISTRY_URL: 'https://gitea.lamachere.fr'
+      REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+      REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -121,11 +123,11 @@ jobs:
 
       - name: Vérifie les secrets Gitea
         run: |
-          if [ -z "$GITEA_USER" ] || [ -z "$GITEA_TOKEN" ]; then
+          if [ -z "$REGISTRY_USER" ] || [ -z "$REGISTRY_TOKEN" ]; then
             echo "::error::REGISTRY_USER et/ou REGISTRY_TOKEN vides. Les créer dans GitHub → Settings → Secrets and variables → Actions → Repository secrets (surtout pas dans Environments), noms exacts en MAJUSCULES, puis Re-run jobs."
             exit 1
           fi
-          echo "✅ secrets présents (longueurs : user=${#GITEA_USER}, token=${#GITEA_TOKEN})"
+          echo "✅ secrets présents (longueurs : user=${#REGISTRY_USER}, token=${#REGISTRY_TOKEN})"
 
       - name: Publie la release sur Gitea
         run: |
@@ -133,23 +135,28 @@ jobs:
           V="$(tr -d '[:space:]' <VERSION)"
           TAG="v$V"
           REPO="flamachere/PVE_Update_Orchestrator"
-          AUTH="$GITEA_USER:$GITEA_TOKEN"
+          AUTH="$REGISTRY_USER:$REGISTRY_TOKEN"
           BODY="$(awk "/^## \\[$V\\]/{flag=1;next}/^## \\[/{flag=0}flag" CHANGELOG.md | head -40)"
           [ -z "$BODY" ] && BODY="Release $TAG"
           PAYLOAD="$(jq -n --arg t "$TAG" --arg b "$BODY" \
             '{tag_name:$t, name:$t, body:$b, draft:false, prerelease:false}')"
-          OUT="$(curl -sS -u "$AUTH" -X POST "$GITEA_URL/api/v1/repos/$REPO/releases" \
+          OUT="$(curl -sS -u "$AUTH" -X POST "$REGISTRY_URL/api/v1/repos/$REPO/releases" \
             -H 'Content-Type: application/json' \
             -d "$PAYLOAD")"
           ID="$(printf '%s' "$OUT" | jq -r '.id // empty')"
           if [ -z "$ID" ]; then
             echo "::warning::création release : $(printf '%s' "$OUT" | head -c 300)"
-            OUT="$(curl -sS -u "$AUTH" "$GITEA_URL/api/v1/repos/$REPO/releases/tags/$TAG")"
+            OUT="$(curl -sS -u "$AUTH" "$REGISTRY_URL/api/v1/repos/$REPO/releases/tags/$TAG")"
             ID="$(printf '%s' "$OUT" | jq -r '.id // empty')"
           fi
           [ -z "$ID" ] && { echo "::error::release Gitea introuvable, réponse : $(printf '%s' "$OUT" | head -c 300)"; exit 1; }
           for f in dist/*; do
             echo "⬆️ $(basename "$f")"
-            curl -sS -u "$AUTH" -X POST "$GITEA_URL/api/v1/repos/$REPO/releases/$ID/assets?name=$(basename "$f")" \
+            curl -sS -u "$AUTH" -X POST "$REGISTRY_URL/api/v1/repos/$REPO/releases/$ID/assets?name=$(basename "$f")" \
+              --data-binary "@$f" >/dev/null
+          done
+          for f in dist/*; do
+            echo "⬆️ $(basename "$f")"
+            curl -sS -u "$AUTH" -X POST "$REGISTRY_URL/api/v1/repos/$REPO/releases/$ID/assets?name=$(basename "$f")" \
               --data-binary "@$f" >/dev/null
           done
