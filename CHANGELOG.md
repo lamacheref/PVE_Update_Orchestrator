@@ -4,6 +4,10 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.4.2] - 2026-09-21
+
+- fix: timeouts longs non bloquants + progression live + topgrade non-interactif (6b9b657)
+
 ## [0.4.1] - 2026-09-21
 
 - merge: bump CI (915af12)
