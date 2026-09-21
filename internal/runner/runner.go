@@ -39,8 +39,9 @@ type Options struct {
 	PBSStorage    string
 	KeepKernels   int
 	PruneAll      bool
-	BackupTimeout time.Duration // 0 = suivi illimité
+	BackupTimeout time.Duration // 0 = suivi quasi-illimité (24h plafond)
 	BackupWait    time.Duration // attente max backup tiers (<=0 = report immédiat)
+	SkipBackup    bool          // MAJ sans snapshot (assumé)
 	StateDir      string
 	Resume        string // run-id à reprendre ("" = nouveau run)
 	WebhookURL    string // "" = Discord désactivé (log stderr)
@@ -163,7 +164,7 @@ func Run(ctx context.Context, run Runner, nodes []config.Node, o Options) (*RunS
 	nodes = config.FilterNodes(nodes, o.NodeFilter)
 	nodes = orderNodes(nodes, o.CanaryFirst)
 	uo := update.Options{DryRun: o.DryRun, AutoReboot: o.AutoReboot, KeepKernels: o.KeepKernels,
-		PBSStorage: o.PBSStorage, PruneAll: o.PruneAll,
+		PBSStorage: o.PBSStorage, PruneAll: o.PruneAll, SkipBackup: o.SkipBackup,
 		BackupTimeout: o.BackupTimeout, BackupWait: o.BackupWait}
 
 	// Inventaire guests (lecture seule, même en dry-run).

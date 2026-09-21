@@ -76,3 +76,22 @@ func TestBusySkip(t *testing.T) {
 		t.Errorf("skip attendu (busy) : %+v", r)
 	}
 }
+
+func TestSkipBackupFlag(t *testing.T) {
+	run := func(_ context.Context, host, cmd string) (string, error) { return "", nil }
+	g := inventory.Guest{VMID: 100, Kind: "lxc", Name: "x", Node: "Janus"}
+	r := UpdateGuest(context.Background(), run, "h", g,
+		Options{PBSStorage: "pbs", SkipBackup: true}, "r1")
+	if !r.OK {
+		t.Errorf("skip-backup doit laisser passer : %+v", r)
+	}
+	found := false
+	for _, l := range r.Log {
+		if strings.Contains(l, "SANS BACKUP") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("mention SANS BACKUP attendue : %+v", r.Log)
+	}
+}

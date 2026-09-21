@@ -31,8 +31,9 @@ type Options struct {
 	PBSStorage    string
 	PruneAll      bool // docker image prune -a (défaut : system prune seul)
 	RebootWait    time.Duration
-	BackupTimeout time.Duration // 0 = suivi illimité (annulable via ctx)
+	BackupTimeout time.Duration // 0 = suivi quasi-illimité (24h plafond)
 	BackupWait    time.Duration // attente max d'un backup tiers (<=0 = report immédiat)
+	SkipBackup    bool          // --skip-backup : MAJ SANS snapshot (assumé, tracé)
 }
 
 // Result résume la mise à jour d'une cible.
@@ -359,7 +360,9 @@ func guestShell(g inventory.Guest, inner string) string {
 
 // qemuRun exécute via l'agent (JSON) avec suivi async si timeout dépassé.
 func qemuRun(ctx context.Context, run Runner, nodeIP string, vmid int, inner string) (string, error) {
-	out, err := run(ctx, nodeIP, fmt.Sprintf("qm guest exec %d --timeout 1800 -- bash -c %s", vmid, shellQ(inner)))
+	qctx, cancel := step(ctx, 35*time.Minute) // aligné sur --timeout 1800 agent + marge
+	defer cancel()
+	out, err := run(qctx, nodeIP, fmt.Sprintf("qm guest exec %d --timeout 1800 -- bash -c %s", vmid, shellQ(inner)))
 	if err != nil {
 		return out, err
 	}
@@ -442,25 +445,29 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 	}
 
 	if !o.DryRun {
-		progress(r.Target, "vérif PBS + backup snapshot")
-		if ok, info := PBSOnline(ctx, run, nodeIP, o.PBSStorage); !ok {
-			r.fail("PBS %s indisponible : %s (fail-closed, aucune modif)", o.PBSStorage, info)
-			return r
-		}
-		id, err := BackupGuest(ctx, run, nodeIP, g, o, runID)
-		if err != nil {
-			if errors.Is(err, ErrBackupBusy) {
-				r.Skipped = true
-				r.OK = true
-				r.note("reporté : backup déjà en cours (rejoué au prochain run)")
-				r.Duration = time.Since(t0).Round(time.Second).String()
+		if o.SkipBackup {
+			r.note("⚠️ SANS BACKUP (--skip-backup assumé par l'opérateur)")
+		} else {
+			progress(r.Target, "vérif PBS + backup snapshot")
+			if ok, info := PBSOnline(ctx, run, nodeIP, o.PBSStorage); !ok {
+				r.fail("PBS %s indisponible : %s (fail-closed, aucune modif)", o.PBSStorage, info)
 				return r
 			}
-			r.fail("backup PBS (fail-closed) : %v", err)
-			return r
+			id, err := BackupGuest(ctx, run, nodeIP, g, o, runID)
+			if err != nil {
+				if errors.Is(err, ErrBackupBusy) {
+					r.Skipped = true
+					r.OK = true
+					r.note("reporté : backup déjà en cours (rejoué au prochain run)")
+					r.Duration = time.Since(t0).Round(time.Second).String()
+					return r
+				}
+				r.fail("backup PBS (fail-closed) : %v", err)
+				return r
+			}
+			r.BackupID = id
+			r.note("backup PBS : %s", id)
 		}
-		r.BackupID = id
-		r.note("backup PBS : %s", id)
 	} else {
 		r.note("dry-run : backup skippé")
 	}

@@ -261,7 +261,15 @@ func (p *Pool) Run(ctx context.Context, host, cmd string) (string, error) {
 	// sess.Close(). Le run ne doit JAMAIS attendre ici.
 	drain := func() { go func() { <-ch }() }
 
+	// Le timeout effectif est le PLUS LONG entre le défaut pool et la deadline
+	// du ctx : les étapes longues (topgrade 45m, backup 24h) posent leur ctx,
+	// les contrôles rapides gardent le garde-fou pool (5 min).
 	timeout := p.opts.CommandTimeout
+	if dl, ok := ctx.Deadline(); ok {
+		if d := time.Until(dl); d > timeout {
+			timeout = d
+		}
+	}
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {

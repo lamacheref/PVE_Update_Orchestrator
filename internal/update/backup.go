@@ -113,7 +113,8 @@ func PBSOnline(ctx context.Context, run Runner, nodeIP, storage string) (bool, s
 }
 
 // BackupGuest snapshotte un guest vers PBS (fail-closed).
-// Timeout<=0 = suivi illimité (annulable via ctx), heartbeat toutes les 5 min.
+// BackupTimeout<=0 = suivi quasi-illimité (plafond technique 24h, annulable
+// via ctx), heartbeat toutes les 5 min.
 func BackupGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Guest, o Options, runID string) (string, error) {
 	if busy, _ := BackupInProgress(ctx, run, g.Node, nodeIP, g.VMID); busy {
 		if err := waitBackupClear(ctx, run, g.Node, nodeIP, g.VMID,
@@ -125,6 +126,8 @@ func BackupGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 	cancel := context.CancelFunc(func() {})
 	if o.BackupTimeout > 0 {
 		bctx, cancel = context.WithTimeout(ctx, o.BackupTimeout)
+	} else {
+		bctx, cancel = context.WithTimeout(ctx, 24*time.Hour)
 	}
 	defer cancel()
 
