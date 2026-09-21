@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.4.6] - 2026-09-21
+
+- merge: bump CI (a592399)
+- fix: kernels proxmox-kernel-* PVE9 + grep sans match non fatal (9cfdd22)
+
 ## [0.4.5] - 2026-09-21
 
 - merge: bump CI (2898276)
