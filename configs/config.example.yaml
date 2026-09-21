@@ -6,7 +6,7 @@ ssh:
   key_file: ~/.ssh/pve-orchestrator_ed25519
   known_hosts: ~/.ssh/known_hosts
   dial_timeout: 10s
-  command_timeout: 60s
+  command_timeout: 5m # garde-fou ; les étapes longues (topgrade…) posent leur propre timeout
   keepalive: 15s
 concurrency:
   guest_workers: 4

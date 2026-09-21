@@ -41,7 +41,7 @@ func (o Options) withDefaults() Options {
 		o.DialTimeout = 10 * time.Second
 	}
 	if o.CommandTimeout == 0 {
-		o.CommandTimeout = 60 * time.Second
+		o.CommandTimeout = 5 * time.Minute // les étapes longues (topgrade…) posent leur propre ctx
 	}
 	if o.Keepalive == 0 {
 		o.Keepalive = 15 * time.Second
@@ -256,6 +256,11 @@ func (p *Pool) Run(ctx context.Context, host, cmd string) (string, error) {
 		ch <- result{string(out), err}
 	}()
 
+	// drain libère la goroutine en arrière-plan : CombinedOutput peut rester
+	// bloqué (petits-fils orphelins qui gardent les pipes ouverts) bien après
+	// sess.Close(). Le run ne doit JAMAIS attendre ici.
+	drain := func() { go func() { <-ch }() }
+
 	timeout := p.opts.CommandTimeout
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -267,12 +272,12 @@ func (p *Pool) Run(ctx context.Context, host, cmd string) (string, error) {
 		return r.out, nil
 	case <-ctx.Done():
 		sess.Close()
-		r := <-ch
-		return r.out, fmt.Errorf("ssh %s annulé : %w", host, ctx.Err())
+		drain()
+		return "", fmt.Errorf("ssh %s annulé/timeout contexte : %w", host, ctx.Err())
 	case <-timer.C:
 		sess.Close()
-		r := <-ch
-		return r.out, fmt.Errorf("ssh %s : timeout %s dépassé", host, timeout)
+		drain()
+		return "", fmt.Errorf("ssh %s : timeout %s dépassé (commande possiblement toujours active côté distant)", host, timeout)
 	}
 }
 

@@ -8,6 +8,7 @@ package update
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -56,6 +57,17 @@ func (r *Result) fail(format string, a ...any) {
 
 func (r *Result) note(format string, a ...any) {
 	r.Log = append(r.Log, fmt.Sprintf(format, a...))
+}
+
+// progress affiche l'étape en cours sur stderr (le run ne rend la main
+// qu'en fin de cible : sans ça, un topgrade de 10 min ressemble à un plantage).
+func progress(target, step string) {
+	fmt.Fprintf(os.Stderr, "⏳ [%s] %s…\n", target, step)
+}
+
+// step borne une étape longue par son propre timeout.
+func step(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, d)
 }
 
 // Dry convertit un Runner en journaliseur (aucune exécution).
@@ -162,9 +174,11 @@ func SelectKernelsToPurge(installed []string, running string, keep int) []string
 	return purge
 }
 
-// waitSSHUp attend le retour SSH après reboot.
-func waitSSHUp(ctx context.Context, run Runner, host string, wait time.Duration) error {
+// waitSSHUp attend le retour SSH après reboot (progression chaque minute).
+func waitSSHUp(ctx context.Context, run Runner, host, target string, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
 	for {
 		if _, err := run(ctx, host, "true"); err == nil {
 			return nil
@@ -175,6 +189,8 @@ func waitSSHUp(ctx context.Context, run Runner, host string, wait time.Duration)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-tick.C:
+			progress(target, fmt.Sprintf("attente reboot %s (reste %s)", host, time.Until(deadline).Round(time.Second)))
 		case <-time.After(10 * time.Second):
 		}
 	}
@@ -202,11 +218,19 @@ func UpdateNode(ctx context.Context, run Runner, host, name string, o Options) R
 	}
 	r.note("avant : kernel=%s upgradable=%d", r.KernelBefore, r.PkgsBefore)
 
-	if _, err := exec(ctx, host, "topgrade -y --only system"); err != nil {
+	progress(r.Target, "topgrade --only system (long, jusqu'à 45 min)")
+	tctx, cancel := step(ctx, 45*time.Minute)
+	_, err = exec(tctx, host, "DEBIAN_FRONTEND=noninteractive topgrade -y --only system")
+	cancel()
+	if err != nil {
 		r.fail("topgrade : %v", err)
 		return r
 	}
-	if _, err := exec(ctx, host, "DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && apt-get clean"); err != nil {
+	progress(r.Target, "apt autoremove + clean")
+	actx, cancel := step(ctx, 15*time.Minute)
+	_, err = exec(actx, host, "DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && apt-get clean")
+	cancel()
+	if err != nil {
 		r.fail("autoremove : %v", err)
 		return r
 	}
@@ -241,7 +265,7 @@ func UpdateNode(ctx context.Context, run Runner, host, name string, o Options) R
 			return r
 		case <-time.After(45 * time.Second):
 		}
-		if err := waitSSHUp(ctx, run, host, wait); err != nil {
+		if err := waitSSHUp(ctx, run, host, r.Target, wait); err != nil {
 			r.fail("retour reboot : %v", err)
 			return r
 		}
@@ -273,7 +297,10 @@ func kernelCleanNode(ctx context.Context, run Runner, host, running string, keep
 		return nil
 	}
 	r.note("kernel-clean : purge %s", strings.Join(purge, " "))
-	if _, err := run(ctx, host, "DEBIAN_FRONTEND=noninteractive apt-get purge -y "+strings.Join(purge, " ")); err != nil {
+	progress(r.Target, "purge vieux kernels")
+	pctx, cancel := step(ctx, 15*time.Minute)
+	defer cancel()
+	if _, err := run(pctx, host, "DEBIAN_FRONTEND=noninteractive apt-get purge -y "+strings.Join(purge, " ")); err != nil {
 		return err
 	}
 	if _, err := run(ctx, host, "proxmox-boot-tool refresh"); err != nil {
@@ -357,9 +384,11 @@ func firstLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// BackupGuest snapshotte un guest vers PBS (fail-closed).
+// BackupGuest snapshotte un guest vers PBS (fail-closed, jusqu'à 60 min).
 func BackupGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Guest, storage, runID string) (string, error) {
-	out, err := run(ctx, nodeIP, fmt.Sprintf("vzdump %d --mode snapshot --storage %s --compress zstd --notes-template 'pre-update %s'",
+	bctx, cancel := step(ctx, 60*time.Minute)
+	defer cancel()
+	out, err := run(bctx, nodeIP, fmt.Sprintf("vzdump %d --mode snapshot --storage %s --compress zstd --notes-template 'pre-update %s'",
 		g.VMID, storage, runID))
 	if err != nil {
 		return "", fmt.Errorf("vzdump : %w (sortie : %s)", err, truncate(out, 300))
@@ -391,6 +420,7 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 	}
 
 	if !o.DryRun {
+		progress(r.Target, "backup PBS snapshot")
 		id, err := BackupGuest(ctx, run, nodeIP, g, o.PBSStorage, runID)
 		if err != nil {
 			r.fail("backup PBS (fail-closed) : %v", err)
@@ -420,13 +450,16 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 	}
 	r.note("avant : kernel=%s upgradable=%d", r.KernelBefore, r.PkgsBefore)
 
-	updateCmd := "topgrade -y --only system && DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && apt-get clean"
+	updateCmd := "DEBIAN_FRONTEND=noninteractive topgrade -y --only system && DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && apt-get clean"
+	progress(r.Target, "topgrade + autoremove guest (long)")
+	uctx, ucancel := step(ctx, 45*time.Minute)
+	defer ucancel()
 	if g.Kind == "lxc" {
-		if _, err := exec(ctx, nodeIP, guestShell(g, updateCmd)); err != nil {
+		if _, err := exec(uctx, nodeIP, guestShell(g, updateCmd)); err != nil {
 			r.fail("update : %v", err)
 			return r
 		}
-	} else if _, err := qemuExecUpdate(ctx, exec, run, nodeIP, g, updateCmd, o.DryRun); err != nil {
+	} else if _, err := qemuExecUpdate(uctx, exec, run, nodeIP, g, updateCmd, o.DryRun); err != nil {
 		r.fail("update : %v", err)
 		return r
 	}
@@ -458,7 +491,7 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 			r.fail("reboot VM : %v", err)
 			return r
 		}
-		if err := waitAgentUp(ctx, run, nodeIP, g.VMID, 10*time.Minute); err != nil {
+		if err := waitAgentUp(ctx, run, nodeIP, g.VMID, r.Target, 10*time.Minute); err != nil {
 			r.fail("retour VM : %v", err)
 			return r
 		}
@@ -485,9 +518,11 @@ func qemuExecUpdate(ctx context.Context, exec, run Runner, nodeIP string, g inve
 }
 
 // waitAgentUp attend le retour de l'agent après reboot VM.
-func waitAgentUp(ctx context.Context, run Runner, nodeIP string, vmid int, wait time.Duration) error {
+func waitAgentUp(ctx context.Context, run Runner, nodeIP string, vmid int, target string, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
 	time.Sleep(30 * time.Second) // laisse la VM partir
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
 	for {
 		if _, err := run(ctx, nodeIP, fmt.Sprintf("qm agent %d ping", vmid)); err == nil {
 			return nil
@@ -498,6 +533,8 @@ func waitAgentUp(ctx context.Context, run Runner, nodeIP string, vmid int, wait 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-tick.C:
+			progress(target, fmt.Sprintf("attente retour VM %d", vmid))
 		case <-time.After(15 * time.Second):
 		}
 	}
@@ -543,13 +580,16 @@ func UpdateDocker(ctx context.Context, run Runner, nodeIP string, g inventory.Gu
 	}
 	n := 0
 	if !o.DryRun {
+		dctx, dcancel := step(ctx, 20*time.Minute)
+		defer dcancel()
 		for _, line := range strings.Split(projects, "\n") {
 			f := strings.Fields(line)
 			if len(f) < 2 {
 				continue
 			}
 			cfg := strings.Split(f[1], ",")[0]
-			if _, err := exec(ctx, nodeIP, guestShell(g, fmt.Sprintf("docker compose -f %s pull && docker compose -f %s up -d", cfg, cfg))); err != nil {
+			progress(r.Target, "compose pull+up "+f[0])
+			if _, err := exec(dctx, nodeIP, guestShell(g, fmt.Sprintf("docker compose -f %s pull && docker compose -f %s up -d", cfg, cfg))); err != nil {
 				r.note("compose %s : %v", f[0], err)
 				continue
 			}
@@ -563,6 +603,7 @@ func UpdateDocker(ctx context.Context, run Runner, nodeIP string, g inventory.Gu
 	if o.PruneAll {
 		prune = "docker system prune -a -f"
 	}
+	progress(r.Target, "docker prune + healthcheck")
 	if _, err := exec(ctx, nodeIP, guestShell(g, prune)); err != nil {
 		r.fail("prune : %v", err)
 		return r
