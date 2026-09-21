@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.2.4] - 2026-09-21
+
+- merge: bump CI (bb0c55b)
+- fix: CI env REGISTRY_* uniquement + URL externe generee (6938a9d)
+
 ## [0.2.3] - 2026-09-21
 
 - fix: CI echec explicite si secrets vides + diag reponse Gitea (8b7fe6b)
