@@ -56,13 +56,13 @@
 
 ```mermaid
 flowchart LR
-    A["🩺 Pre-check"] --> B["💾 Backup PBS"]
-    B --> C["⬆️ topgrade + autoremove"]
-    C --> D["🩺 Post-check"]
-    D --> E{"🐧 Nouveau kernel ?"}
-    E -- "Oui" --> F["🔁 Reboot"]
-    E -- "Non" --> G["📣 Rapport"]
-    F --> H["🧼 Kernel-clean"]
+    A["Pre-check"] --> B["Backup PBS"]
+    B --> C["topgrade + autoremove"]
+    C --> D["Post-check"]
+    D --> E{"Nouveau kernel ?"}
+    E -- "Oui" --> F["Reboot"]
+    E -- "Non" --> G["Rapport"]
+    F --> H["Kernel-clean"]
     H --> G
 ```
 
