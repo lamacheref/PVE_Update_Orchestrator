@@ -53,22 +53,25 @@ Conventions de commits : `feat:` → bump `m`, sinon bump `f`. Le bump `M` exige
 
 ---
 
-## 🏗️ CI : GitHub compile → Gitea reçoit
+## 🏗️ CI : chaque plateforme publie chez elle
 
 `[.github/workflows/ci.yml](.github/workflows/ci.yml)` sur push `main` :
 
-1. 🔖 **version** — `scripts/bump.sh auto`, entrée CHANGELOG, commit `chore(release): vX.Y.Z` + tag (ignoré si le commit est déjà une release → pas de boucle ♾️)
-2. 🏗️ **build** — `go vet`, `go test`, binaires `linux/amd64` + `linux/arm64` + `SHA256SUMS.txt` (artefacts GitHub)
-3. 📦 **gitea-release** — crée la release sur Gitea et y téléverse les binaires
+1. 🔖 **version** — GitHub uniquement : `scripts/bump.sh auto`, entrée CHANGELOG, commit `chore(release): vX.Y.Z` + tag (ignoré si le commit est déjà une release → pas de boucle ♾️ ; ignoré sur Gitea → pas de doublon)
+2. 🧪 **test** — les deux plateformes : `go vet` + `go test`
+3. 📦 **release-github** — GitHub uniquement (nouvelle version ou manuel) : build `linux/amd64` + `linux/arm64` + `SHA256SUMS.txt`, release GitHub via `gh`
+4. 📦 **release-gitea** — Gitea uniquement : même build, release Gitea via API (idempotent : ne republie jamais un asset déjà présent)
 
-🔑 Secrets GitHub requis (auth basique Gitea : user + token en mot de passe) :
+`REGISTRY_URL` est **générée** depuis le contexte (`github.server_url`) : chaque plateforme publie chez elle, aucun cross-push. Noms `REGISTRY_*` uniquement, jamais `GITEA_*`.
+
+🔑 Secrets requis côté **Gitea** (secrets du dépôt, auth basique API : user + token en mot de passe) :
 
 | Secret | 📝 Valeur |
 |---|---|
-| `REGISTRY_USER` | Utilisateur Gitea (existant) |
-| `REGISTRY_TOKEN` | Token Gitea avec droits `write:repository` (existant) |
+| `REGISTRY_USER` | Utilisateur Gitea |
+| `REGISTRY_TOKEN` | Token Gitea avec droits `write:repository` |
 
-URL API générée dans le workflow : `https://gitea.lamachere.fr` (domaine externe joignable depuis GitHub ; `gitea.smiden.eu` réservé au LAN/SSH). Noms `REGISTRY_*` uniquement, jamais `GITEA_*`.
+Côté GitHub : aucun secret, `GITHUB_TOKEN` automatique.
 
 ---
 

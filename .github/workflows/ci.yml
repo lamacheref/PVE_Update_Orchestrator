@@ -80,19 +80,11 @@ jobs:
           go vet ./...
           go test ./...
 
-  release:
-    name: "📦 Build binaires + release Gitea"
+  release-github:
+    name: "📦 Build + release GitHub"
     runs-on: ubuntu-latest
     needs: [version, test]
     if: github.repository == 'lamacheref/PVE_Update_Orchestrator' && (needs.version.outputs.changed == 'true' || github.event_name == 'workflow_dispatch')
-    env:
-      # Auth basique Gitea : user + token en mot de passe.
-      # Noms REGISTRY_* uniquement (pas de GITEA_*).
-      # URL générée : domaine externe joignable depuis GitHub
-      # (gitea.smiden.eu n'est pas routable depuis les runners).
-      REGISTRY_URL: 'https://gitea.lamachere.fr'
-      REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
-      REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -104,13 +96,10 @@ jobs:
           go-version: stable
           cache: true
 
-      - name: Vet + tests (sur la ref releasée)
+      - name: Vet + tests + build
         run: |
           go vet ./...
           go test ./...
-
-      - name: Build linux amd64 + arm64
-        run: |
           mkdir -p dist
           V="$(tr -d '[:space:]' <VERSION)"
           for arch in amd64 arm64; do
@@ -119,44 +108,87 @@ jobs:
               -o "dist/pve-orchestrator-linux-$arch" .
           done
           (cd dist && sha256sum * >SHA256SUMS.txt)
-          ls -l dist/
 
-      - name: Vérifie les secrets Gitea
+      - name: Publie la release GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="$(tr -d '[:space:]' <VERSION)"
+          TAG="v$V"
+          BODY="$(awk "/^## \\[$V\\]/{flag=1;next}/^## \\[/{flag=0}flag" CHANGELOG.md | head -40)"
+          [ -z "$BODY" ] && BODY="Release $TAG"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "$BODY"
+          gh release upload "$TAG" dist/* --clobber
+
+  release-gitea:
+    name: "📦 Build + release Gitea"
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.repository == 'flamachere/PVE_Update_Orchestrator'
+    env:
+      # URL générée depuis le contexte : chaque plateforme publie chez elle.
+      # Ici = https://gitea.smiden.eu (jamais lamachere.fr, jamais en secret).
+      REGISTRY_URL: ${{ github.server_url }}
+      REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+      REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Vet + tests + build
+        run: |
+          go vet ./...
+          go test ./...
+          mkdir -p dist
+          V="$(tr -d '[:space:]' <VERSION)"
+          for arch in amd64 arm64; do
+            GOOS=linux GOARCH="$arch" go build -trimpath \
+              -ldflags "-X main.version=$V" \
+              -o "dist/pve-orchestrator-linux-$arch" .
+          done
+          (cd dist && sha256sum * >SHA256SUMS.txt)
+
+      - name: Vérifie les secrets
         run: |
           if [ -z "$REGISTRY_USER" ] || [ -z "$REGISTRY_TOKEN" ]; then
-            echo "::error::REGISTRY_USER et/ou REGISTRY_TOKEN vides. Les créer dans GitHub → Settings → Secrets and variables → Actions → Repository secrets (surtout pas dans Environments), noms exacts en MAJUSCULES, puis Re-run jobs."
+            echo "::error::REGISTRY_USER et/ou REGISTRY_TOKEN vides (secrets du dépôt Gitea)."
             exit 1
           fi
-          echo "✅ secrets présents (longueurs : user=${#REGISTRY_USER}, token=${#REGISTRY_TOKEN})"
+          echo "✅ secrets présents"
 
-      - name: Publie la release sur Gitea
+      - name: Publie la release Gitea (idempotent)
         run: |
           set -euo pipefail
           V="$(tr -d '[:space:]' <VERSION)"
           TAG="v$V"
           REPO="flamachere/PVE_Update_Orchestrator"
           AUTH="$REGISTRY_USER:$REGISTRY_TOKEN"
-          BODY="$(awk "/^## \\[$V\\]/{flag=1;next}/^## \\[/{flag=0}flag" CHANGELOG.md | head -40)"
-          [ -z "$BODY" ] && BODY="Release $TAG"
-          PAYLOAD="$(jq -n --arg t "$TAG" --arg b "$BODY" \
-            '{tag_name:$t, name:$t, body:$b, draft:false, prerelease:false}')"
-          OUT="$(curl -sS -u "$AUTH" -X POST "$REGISTRY_URL/api/v1/repos/$REPO/releases" \
-            -H 'Content-Type: application/json' \
-            -d "$PAYLOAD")"
+          API="$REGISTRY_URL/api/v1/repos/$REPO"
+          OUT="$(curl -sS -u "$AUTH" "$API/releases/tags/$TAG")"
           ID="$(printf '%s' "$OUT" | jq -r '.id // empty')"
           if [ -z "$ID" ]; then
-            echo "::warning::création release : $(printf '%s' "$OUT" | head -c 300)"
-            OUT="$(curl -sS -u "$AUTH" "$REGISTRY_URL/api/v1/repos/$REPO/releases/tags/$TAG")"
+            BODY="$(awk "/^## \\[$V\\]/{flag=1;next}/^## \\[/{flag=0}flag" CHANGELOG.md | head -40)"
+            [ -z "$BODY" ] && BODY="Release $TAG"
+            PAYLOAD="$(jq -n --arg t "$TAG" --arg b "$BODY" \
+              '{tag_name:$t, name:$t, body:$b, draft:false, prerelease:false}')"
+            OUT="$(curl -sS -u "$AUTH" -X POST "$API/releases" \
+              -H 'Content-Type: application/json' -d "$PAYLOAD")"
             ID="$(printf '%s' "$OUT" | jq -r '.id // empty')"
+            [ -z "$ID" ] && { echo "::error::création release : $(printf '%s' "$OUT" | head -c 300)"; exit 1; }
           fi
-          [ -z "$ID" ] && { echo "::error::release Gitea introuvable, réponse : $(printf '%s' "$OUT" | head -c 300)"; exit 1; }
+          HAVE="$(curl -sS -u "$AUTH" "$API/releases/$ID/assets" | jq -r '.[].name')"
           for f in dist/*; do
-            echo "⬆️ $(basename "$f")"
-            curl -sS -u "$AUTH" -X POST "$REGISTRY_URL/api/v1/repos/$REPO/releases/$ID/assets?name=$(basename "$f")" \
-              --data-binary "@$f" >/dev/null
-          done
-          for f in dist/*; do
-            echo "⬆️ $(basename "$f")"
-            curl -sS -u "$AUTH" -X POST "$REGISTRY_URL/api/v1/repos/$REPO/releases/$ID/assets?name=$(basename "$f")" \
-              --data-binary "@$f" >/dev/null
+            if printf '%s\n' "$HAVE" | grep -qx "$(basename "$f")"; then
+              echo "⏭️ $(basename "$f") déjà publié"
+            else
+              echo "⬆️ $(basename "$f")"
+              curl -sS -u "$AUTH" -X POST "$API/releases/$ID/assets?name=$(basename "$f")" \
+                --data-binary "@$f" >/dev/null
+            fi
           done

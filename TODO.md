@@ -8,7 +8,7 @@
 - [x] README.md / TODO.md / CHANGELOG.md / ROADMAP.md
 - [x] VERSION `0.0.1` + `scripts/bump.sh` (M manuel, m/f auto)
 - [x] CI GitHub → artefacts vers Gitea
-- [ ] Release Gitea vérifiée (binaires `v0.2.0` dans l'onglet Releases — auth `REGISTRY_USER`/`REGISTRY_TOKEN`, validation au prochain run CI) 📦
+- [ ] Releases vérifiées des deux côtés (GitHub + Gitea, binaires `linux-amd64/arm64` + `SHA256SUMS.txt`) 📦
 - [ ] Régénérer le webhook Discord exposé + `.env` (mode 600) 🔒
 
 ## 🌱 Lot 0 — Socle (~1 sem) → v0.2.0
