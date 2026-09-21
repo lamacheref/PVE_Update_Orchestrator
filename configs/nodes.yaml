@@ -1,0 +1,23 @@
+# Nodes du cluster — source de vérité (IPs fixes, sans secrets).
+nodes:
+  - name: Janus
+    ip: 192.168.110.110
+    role: canary
+  - name: Zeus
+    ip: 192.168.110.106
+    role: standard
+  - name: Nyx
+    ip: 192.168.110.108
+    role: standard
+  - name: Loki
+    ip: 192.168.110.109
+    role: standard
+  - name: Aphrodite
+    ip: 192.168.110.112
+    role: standard
+  - name: Atlas
+    ip: 192.168.110.191
+    role: standard
+  - name: Artemis
+    ip: 192.168.110.192
+    role: standard

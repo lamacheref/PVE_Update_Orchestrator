@@ -11,15 +11,16 @@
 - [ ] Secrets CI posés (`GITEA_URL`, `GITEA_TOKEN`) 🔑
 - [ ] Régénérer le webhook Discord exposé + `.env` (mode 600) 🔒
 
-## 🌱 Lot 0 — Socle (~1 sem) → v0.1.0
+## 🌱 Lot 0 — Socle (~1 sem) → v0.2.0
 
 - [x] Squelette Go compilable (`main.go`, `internal/version`)
-- [ ] `internal/config` (YAML + `.env`, jamais de secrets en git)
-- [ ] `bootstrap-ssh` (clé dédiée via seed, `known_hosts`, rotation/révocation)
-- [ ] `inventory sync` réel sur les 7 nodes
+- [x] `internal/config` (YAML + `.env`, jamais de secrets en git)
+- [x] `bootstrap-ssh` (clé dédiée via seed, `known_hosts`, rotation/révocation)
+- [x] `inventory sync` réel sur les 7 nodes (code + tests fixtures)
+- [ ] Run réel `bootstrap-ssh --yes` + `inventory sync` sur le cluster (touche la prod — à confirmer)
 - [ ] CI verte (`build/vet/test`) ✅
 
-## 🚀 Lot 1 — MVP (~1-2 sem) → v0.2.0
+## 🚀 Lot 1 — MVP (~1-2 sem) → v0.3.0
 
 - [ ] `runner` (rolling 1 node, worker-pool guests, resume, verrou)
 - [ ] `health` (pré/post-checks)

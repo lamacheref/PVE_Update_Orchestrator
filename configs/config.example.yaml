@@ -1,0 +1,20 @@
+# Exemple de configuration — copier vers config.yaml et adapter.
+# Les secrets (webhook Discord…) ne sont JAMAIS ici : voir discord.webhook_env.
+ssh:
+  user: root
+  port: 22
+  key_file: ~/.ssh/pve-orchestrator_ed25519
+  known_hosts: ~/.ssh/known_hosts
+  dial_timeout: 10s
+  command_timeout: 60s
+  keepalive: 15s
+concurrency:
+  guest_workers: 4
+pbs:
+  storage: pbs-pre-update
+  mode: snapshot
+discord:
+  webhook_env: DISCORD_WEBHOOK_UPDATEUR
+update:
+  auto_reboot: true
+  keep_kernels: 2

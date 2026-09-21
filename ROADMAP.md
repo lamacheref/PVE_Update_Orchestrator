@@ -5,10 +5,12 @@
 
 | 📦 Jalon | 🎯 Contenu | 🏷️ Version cible | ✅ Critère de sortie |
 |---|---|---|---|
-| 🌱 **Lot 0 — Socle** | Config, `bootstrap-ssh`, `inventory sync` 7 nodes, CI verte | `v0.1.0` (features) | `inventory sync` réel OK, `build/vet/test` verts |
-| 🚀 **Lot 1 — MVP** | Runner, health, update node/guest, Discord, `serve` lecture seule | `v0.2.0` | Canary Janus + 1 guest `--dry-run` puis réel 🐤 |
-| 💪 **Lot 2 — Durcissement** | Reboot/resume, kernel-clean natif, backup/rollback PBS, systemd | `v0.3.0`+ | Rollback réel sur VM poubelle 🗑️, run ~30 min ☕ |
-| 🎨 **Lot 3 — Docker + UI** | Module docker, actions `retry/rollback`, runbook | `v0.4.0`+ | Revue d'un run Discord complet |
+| 🌱 **Lot 0 — Socle** | Config, `bootstrap-ssh`, `inventory sync` 7 nodes, CI verte | `v0.2.0` (features) | `inventory sync` réel OK, `build/vet/test` verts |
+| 🚀 **Lot 1 — MVP** | Runner, health, update node/guest, Discord, `serve` lecture seule | `v0.3.0` | Canary Janus + 1 guest `--dry-run` puis réel 🐤 |
+| 💪 **Lot 2 — Durcissement** | Reboot/resume, kernel-clean natif, backup/rollback PBS, systemd | `v0.4.0`+ | Rollback réel sur VM poubelle 🗑️, run ~30 min ☕ |
+| 🎨 **Lot 3 — Docker + UI** | Module docker, actions `retry/rollback`, runbook | `v0.5.0`+ | Revue d'un run Discord complet |
+
+> ⚠️ `v0.1.0` consommée par le bump auto du socle : jalons décalés en conséquence.
 
 ## 🔴 Promotion v1.0.0 — geste utilisateur uniquement
 

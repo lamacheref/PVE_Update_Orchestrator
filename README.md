@@ -16,7 +16,17 @@
 
 ```bash
 go build -ldflags "-X main.version=$(cat VERSION)" -o pve-orchestrator .
-./pve-orchestrator --version   # pve-orchestrator 0.0.1
+./pve-orchestrator --version   # pve-orchestrator 0.1.0
+
+# 🌱 Lot 0 : générer la clé dédiée (sans toucher aux nodes)
+./pve-orchestrator bootstrap-ssh --generate-only
+
+# 🔌 Lot 0 : déployer la clé via la seed puis vérifier (modifie les nodes !)
+./pve-orchestrator bootstrap-ssh --seed-key ~/.ssh/flamachere_pro_20260511 --nodes Janus --yes
+./pve-orchestrator bootstrap-ssh --seed-key ~/.ssh/flamachere_pro_20260511 --yes
+
+# 🗺️ Lot 0 : inventaire réel du cluster
+./pve-orchestrator inventory sync --out inventory.json
 ```
 
 | 📄 Doc | 🎯 Contenu |
