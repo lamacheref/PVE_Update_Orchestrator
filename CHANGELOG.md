@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.4.0] - 2026-09-21
+
+- merge: bump CI (2fa5c03)
+- feat: Lot 1 runner + health + update + discord + serve dashboard (0da433a)
+
 ## [0.3.0] - 2026-09-21
 
 - feat: autonomie cluster discover + reconcile/rotate/revoke (c79156f)
