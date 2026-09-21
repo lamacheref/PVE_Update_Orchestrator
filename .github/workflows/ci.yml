@@ -119,6 +119,14 @@ jobs:
           (cd dist && sha256sum * >SHA256SUMS.txt)
           ls -l dist/
 
+      - name: Vérifie les secrets Gitea
+        run: |
+          if [ -z "$GITEA_USER" ] || [ -z "$GITEA_TOKEN" ]; then
+            echo "::error::REGISTRY_USER et/ou REGISTRY_TOKEN vides. Les créer dans GitHub → Settings → Secrets and variables → Actions → Repository secrets (surtout pas dans Environments), noms exacts en MAJUSCULES, puis Re-run jobs."
+            exit 1
+          fi
+          echo "✅ secrets présents (longueurs : user=${#GITEA_USER}, token=${#GITEA_TOKEN})"
+
       - name: Publie la release sur Gitea
         run: |
           set -euo pipefail
@@ -130,13 +138,16 @@ jobs:
           [ -z "$BODY" ] && BODY="Release $TAG"
           PAYLOAD="$(jq -n --arg t "$TAG" --arg b "$BODY" \
             '{tag_name:$t, name:$t, body:$b, draft:false, prerelease:false}')"
-          ID="$(curl -sS -u "$AUTH" -X POST "$GITEA_URL/api/v1/repos/$REPO/releases" \
+          OUT="$(curl -sS -u "$AUTH" -X POST "$GITEA_URL/api/v1/repos/$REPO/releases" \
             -H 'Content-Type: application/json' \
-            -d "$PAYLOAD" | jq -r '.id // empty')"
+            -d "$PAYLOAD")"
+          ID="$(printf '%s' "$OUT" | jq -r '.id // empty')"
           if [ -z "$ID" ]; then
-            ID="$(curl -sS -u "$AUTH" "$GITEA_URL/api/v1/repos/$REPO/releases/tags/$TAG" | jq -r '.id // empty')"
+            echo "::warning::création release : $(printf '%s' "$OUT" | head -c 300)"
+            OUT="$(curl -sS -u "$AUTH" "$GITEA_URL/api/v1/repos/$REPO/releases/tags/$TAG")"
+            ID="$(printf '%s' "$OUT" | jq -r '.id // empty')"
           fi
-          [ -z "$ID" ] && { echo "release Gitea introuvable" >&2; exit 1; }
+          [ -z "$ID" ] && { echo "::error::release Gitea introuvable, réponse : $(printf '%s' "$OUT" | head -c 300)"; exit 1; }
           for f in dist/*; do
             echo "⬆️ $(basename "$f")"
             curl -sS -u "$AUTH" -X POST "$GITEA_URL/api/v1/repos/$REPO/releases/$ID/assets?name=$(basename "$f")" \
