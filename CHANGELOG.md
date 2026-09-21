@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.1.1] - 2026-09-21
+
+- fix: CI release seulement sur github (garde anti-double chore) (e9aa4ad)
+- fix: mermaid §2 sans emojis (getAttribute renderer) (d40d556)
+
 ## [0.1.0] - 2026-09-21
 
 - feat: docs README/TODO/CHANGELOG/ROADMAP + versionning M.m.f + CI github-vers-gitea (57df2bb)
