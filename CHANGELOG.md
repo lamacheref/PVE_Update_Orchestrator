@@ -4,6 +4,10 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.4.7] - 2026-09-21
+
+- fix: topgrade --allow-root adaptatif (v9 vs v17+) (deef809)
+
 ## [0.4.6] - 2026-09-21
 
 - merge: bump CI (a592399)
