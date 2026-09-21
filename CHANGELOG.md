@@ -4,6 +4,11 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.4.3] - 2026-09-21
+
+- merge: bump CI (60e0e46)
+- fix: reboot si kernel installe non boote + recapture uname post-reboot (4ed7d46)
+
 ## [0.4.2] - 2026-09-21
 
 - fix: timeouts longs non bloquants + progression live + topgrade non-interactif (6b9b657)
