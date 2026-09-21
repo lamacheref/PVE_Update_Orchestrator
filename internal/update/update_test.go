@@ -48,10 +48,16 @@ func TestSelectKernelsToPurge(t *testing.T) {
 }
 
 func TestKernelPackages(t *testing.T) {
-	out := "ii  pve-kernel-6.8.12-4-pve amd64 stuff\nii  pve-kernel-6.8 amd64 meta\nii  pve-headers-6.8.12-4-pve amd64 h\n"
+	out := "ii  pve-kernel-6.8.12-4-pve amd64 stuff\nii  pve-kernel-6.8 amd64 meta\nii  pve-headers-6.8.12-4-pve amd64 h\n" +
+		"ii  proxmox-kernel-7.0 amd64 meta\nii  proxmox-kernel-7.0.14-17-pve-signed amd64 x\nii  proxmox-kernel-7.0.14-19-pve-signed amd64 x\nii  proxmox-kernel-helper amd64 tool\n"
 	pkgs := KernelPackages(out)
-	if len(pkgs) != 2 {
+	if len(pkgs) != 6 {
 		t.Errorf("got %v", pkgs)
+	}
+	// PVE 9 : keep=2 → purge du plus vieux, jamais le booté ni les metas.
+	purge := SelectKernelsToPurge(pkgs, "7.0.14-19-pve", 2)
+	if len(purge) != 1 || purge[0] != "pve-kernel-6.8.12-4-pve" {
+		t.Errorf("purge = %v", purge)
 	}
 }
 

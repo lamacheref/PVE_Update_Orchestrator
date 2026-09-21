@@ -106,7 +106,7 @@ func parseBeforeAfter(out string) (kernel string, pkgs int) {
 	return kernel, pkgs
 }
 
-var reKernelPkg = regexp.MustCompile(`^ii\s+(pve-kernel-\S+)\s`)
+var reKernelPkg = regexp.MustCompile(`^ii\s+((?:pve-kernel|proxmox-kernel)-\S+)\s`)
 var reKernelVer = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)-(\d+)`)
 
 // KernelPackages extrait les paquets pve-kernel installés de `dpkg -l`.
@@ -311,7 +311,7 @@ func UpdateNode(ctx context.Context, run Runner, host, name string, o Options) R
 
 // kernelCleanNode purge les vieux pve-kernel (jamais le booté) + refresh boot-tool.
 func kernelCleanNode(ctx context.Context, run Runner, host, running string, keep int, r *Result) error {
-	out, err := run(ctx, host, "dpkg -l 'pve-kernel-*' 2>/dev/null | grep '^ii'")
+	out, err := run(ctx, host, "dpkg -l 'pve-kernel-*' 'proxmox-kernel-*' 2>/dev/null | grep '^ii' || true")
 	if err != nil {
 		return err
 	}
