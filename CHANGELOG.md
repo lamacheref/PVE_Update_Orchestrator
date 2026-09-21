@@ -4,6 +4,10 @@
 > Les entrées de release sont générées par la CI (`chore(release)`), complétées à la main si besoin.
 
 ## [Unreleased]
+## [0.2.0] - 2026-09-21
+
+- feat: Lot 0 config + pool SSH + inventory sync + bootstrap-ssh (be532d5)
+
 ## [0.1.1] - 2026-09-21
 
 - fix: CI release seulement sur github (garde anti-double chore) (e9aa4ad)
