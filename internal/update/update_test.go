@@ -84,6 +84,24 @@ func TestTopgradeBase(t *testing.T) {
 	}
 }
 
+func TestRepairPreamble(t *testing.T) {
+	var cmds []string
+	run := func(_ context.Context, host, cmd string) (string, error) {
+		cmds = append(cmds, cmd)
+		if strings.HasPrefix(cmd, "dpkg --configure") {
+			return "", errors.New("dpkg cassé")
+		}
+		return "6.8\n---APT---\n0", nil
+	}
+	r := UpdateNode(context.Background(), run, "h", "n", Options{})
+	if r.OK || !strings.Contains(r.Error, "réparation dpkg") {
+		t.Errorf("échec repair attendu : %+v", r)
+	}
+	if len(cmds) < 2 || !strings.HasPrefix(cmds[1], "dpkg --configure") {
+		t.Errorf("repair doit suivre la capture : %v", cmds)
+	}
+}
+
 func TestBackupGuestVerify(t *testing.T) {
 	okOut := "INFO: Starting Backup\nINFO: Backup Volume: local:backup/vzdump-lxc-100-xyz.zst\nINFO: Finished Backup\n"
 	run := func(_ context.Context, host, cmd string) (string, error) {

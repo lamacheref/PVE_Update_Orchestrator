@@ -110,6 +110,10 @@ const (
 	aptAfter  = aptBefore
 )
 
+// repairCmd remet dpkg d'aplomb après une interruption (timeout kill…) :
+// configure les paquets déballés puis répare les dépendances. Idempotent.
+const repairCmd = "dpkg --configure -a && DEBIAN_FRONTEND=noninteractive apt-get install -f -y"
+
 // parseBeforeAfter lit kernel + compte depuis "…\n---APT---\nN".
 // Robuste aux shells pollués (.bashrc/starship sur stderr fusionnée) :
 // le kernel est cherché par motif version, pas par position.
@@ -261,6 +265,14 @@ func UpdateNode(ctx context.Context, run Runner, host, name string, o Options) R
 	}
 	r.note("avant : kernel=%s upgradable=%d", r.KernelBefore, r.PkgsBefore)
 
+	progress(r.Target, "réparation dpkg si interrompu")
+	rctx, rcancel := step(ctx, 15*time.Minute)
+	_, err = exec(rctx, host, repairCmd)
+	rcancel()
+	if err != nil {
+		r.fail("réparation dpkg : %v (lancez dpkg --configure -a à la main)", err)
+		return r
+	}
 	progress(r.Target, "topgrade --only system (long)")
 	tctx, cancel := step(ctx, updateTimeout(o))
 	_, probeErr := exec(tctx, host, "topgrade --allow-root --version >/dev/null 2>&1")
@@ -525,14 +537,25 @@ func UpdateGuest(ctx context.Context, run Runner, nodeIP string, g inventory.Gue
 	}
 	topCmd := topgradeBase(probeTopgrade())
 	updateCmd = topCmd + " && " + updateCmd
+	progress(r.Target, "réparation dpkg si interrompu")
 	if g.Kind == "lxc" {
+		if _, err := exec(uctx, nodeIP, guestShell(g, repairCmd)); err != nil {
+			r.fail("réparation dpkg : %v (lancez dpkg --configure -a à la main)", err)
+			return r
+		}
 		if _, err := exec(uctx, nodeIP, guestShell(g, updateCmd)); err != nil {
 			r.fail("update : %v", err)
 			return r
 		}
-	} else if _, err := qemuExecUpdate(uctx, exec, run, nodeIP, g, updateCmd, o.DryRun); err != nil {
-		r.fail("update : %v", err)
-		return r
+	} else {
+		if _, err := qemuRun(uctx, run, nodeIP, g.VMID, repairCmd); err != nil {
+			r.fail("réparation dpkg : %v (lancez dpkg --configure -a à la main)", err)
+			return r
+		}
+		if _, err := qemuExecUpdate(uctx, exec, run, nodeIP, g, updateCmd, o.DryRun); err != nil {
+			r.fail("update : %v", err)
+			return r
+		}
 	}
 
 	after := ""
